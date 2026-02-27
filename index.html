@@ -143,19 +143,11 @@ body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:var(--f
 
 .hidden{display:none!important}
 
-@media print{
-  body *{display:none!important}
-  #ticket-modal,#ticket-modal *{display:block!important}
-  #ticket-modal{position:static!important;background:none!important;backdrop-filter:none!important}
-  #ticket-modal .modal-sheet{box-shadow:none!important;border-radius:0!important;padding:0!important;max-height:none!important;animation:none!important}
-  #ticket-modal .modal-handle,#ticket-modal .modal-actions{display:none!important}
-  #ticket-modal .ticket{font-family:monospace!important}
-  #ticket-modal .ticket-table{display:table!important}
-  #ticket-modal .ticket-table thead{display:table-header-group!important}
-  #ticket-modal .ticket-table tbody{display:table-row-group!important}
-  #ticket-modal .ticket-table tr{display:table-row!important}
-  #ticket-modal .ticket-table th,#ticket-modal .ticket-table td{display:table-cell!important}
-}
+body.printing>*{display:none!important}
+body.printing #ticket-modal{display:flex!important}
+body.printing #ticket-modal .modal-actions{display:none!important}
+body.printing #ticket-modal .modal-sheet{box-shadow:none;max-height:none;animation:none}
+body.printing #ticket-modal .modal-handle{display:none}
 </style>
 </head>
 <body>
@@ -394,7 +386,11 @@ function showTicket(sale){
 function closeTicket(){$("ticket-modal").classList.add("hidden")}
 
 function printTicket(){
-  window.print();
+  document.body.classList.add("printing");
+  setTimeout(function(){
+    window.print();
+    document.body.classList.remove("printing");
+  },100);
 }
 
 // INIT
