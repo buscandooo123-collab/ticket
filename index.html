@@ -175,7 +175,6 @@ body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:var(--f
     <div class="order-footer">
       <div class="totals-compact">
         <div class="totals-row"><span>Subtotal:</span><span id="t-sub">$0.00</span></div>
-        <div class="totals-row"><span>IVA 16%:</span><span id="t-iva">$0.00</span></div>
         <div class="totals-grand"><span>TOTAL:</span><span id="t-total">$0.00</span></div>
       </div>
       <div class="btn-row">
@@ -344,15 +343,15 @@ function renderOrder(){
       </div>`}).join("");
   }
 
-  const sub=orderItems.reduce((s,i)=>s+i.total,0),iva=sub*.16;
-  $("t-sub").textContent=fmt(sub);$("t-iva").textContent=fmt(iva);$("t-total").textContent=fmt(sub+iva);
+  const sub=orderItems.reduce((s,i)=>s+i.total,0);
+  $("t-sub").textContent=fmt(sub);$("t-total").textContent=fmt(sub);
 }
 
 // SALE
 function completeSale(){
   if(!orderItems.length)return;
-  const sub=orderItems.reduce((s,i)=>s+i.total,0),iva=sub*.16;
-  const sale={folio:mkFolio(),date:new Date().toISOString(),items:orderItems.map(i=>({name:i.name,price:i.price,unit:i.unit,qty:i.qty,total:i.total})),subtotal:sub,iva,total:sub+iva,source:"terminal"};
+  const sub=orderItems.reduce((s,i)=>s+i.total,0);
+  const sale={folio:mkFolio(),date:new Date().toISOString(),items:orderItems.map(i=>({name:i.name,price:i.price,unit:i.unit,qty:i.qty,total:i.total})),subtotal:sub,total:sub,source:"terminal"};
   salesRef.add(sale).then(()=>{
     showTicket(sale);
     orderItems=[];renderOrder();updateCartBadge();
@@ -372,7 +371,7 @@ function showTicket(sale){
   $("ticket-content").innerHTML=`<div class="ticket">${wm}<div class="ticket-body">
     <div class="ticket-header">${lt}<div class="ticket-store">${sn}</div>${inf?`<div class="ticket-info">${inf}</div>`:""}<div class="ticket-folio">${sale.folio}</div><div class="ticket-date">${fmtDate(sale.date)}</div></div>
     <table class="ticket-table"><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">P.U.</th><th class="r">Imp.</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="ticket-totals"><div class="ticket-total-row"><span>Subtotal:</span><span>${fmt(sale.subtotal)}</span></div><div class="ticket-total-row"><span>IVA 16%:</span><span>${fmt(sale.iva)}</span></div><div class="ticket-total-grand"><span>TOTAL:</span><span>${fmt(sale.total)}</span></div></div>
+    <div class="ticket-totals"><div class="ticket-total-grand"><span>TOTAL:</span><span>${fmt(sale.total)}</span></div></div>
     <div class="ticket-footer"><div class="thanks">¡Gracias!</div><p>Artículos: ${sale.items.length} · 📱 Terminal</p></div>
   </div></div>`;
   $("ticket-modal").classList.remove("hidden");
@@ -387,7 +386,7 @@ function printTicket(){
   const sn=biz.name||"Punto de Venta";
   const inf=[biz.address,biz.phone?"Tel: "+biz.phone:""].filter(Boolean).join("<br>");
   const rows=sale.items.map(i=>`<tr><td>${i.name}</td><td style="text-align:right">${i.qty} ${i.unit}</td><td style="text-align:right">${fmt(i.price)}</td><td style="text-align:right">${fmt(i.total)}</td></tr>`).join("");
-  const html=`<html><head><title>Ticket</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:monospace;font-size:10px;padding:6px;width:260px;margin:0 auto;position:relative}.hd{text-align:center;border-bottom:2px dashed #aaa;padding-bottom:6px;margin-bottom:5px}.st{font-size:12px;font-weight:700}.inf{font-size:7px;color:#666;margin-top:2px;line-height:1.3}.fl{font-size:8px;font-weight:600;margin-top:3px;background:#eee;padding:2px 5px;display:inline-block;border-radius:2px}.dt{font-size:8px;color:#666;margin-top:2px}table{width:100%;border-collapse:collapse;margin:5px 0}th{text-align:left;font-size:7px;font-weight:600;border-bottom:1px solid #333;padding:2px}td{padding:2px;font-size:8px;border-bottom:1px dotted #ccc}.tt{border-top:2px dashed #aaa;padding-top:5px;margin-top:3px}.tr{display:flex;justify-content:space-between;font-size:8px;padding:1px 0}.tg{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:2px;padding-top:3px;border-top:1px solid #333}.ft{text-align:center;margin-top:6px;border-top:2px dashed #aaa;padding-top:5px;font-size:7px;color:#666}.ft b{font-size:9px;color:#111;display:block;margin-bottom:2px}.bd{position:relative;z-index:1}@page{size:58mm auto;margin:0}@media print{html,body{width:58mm;height:auto;margin:0;padding:2mm}}</style></head><body>${wm}<div class="bd"><div class="hd">${lt}<div class="st">${sn}</div>${inf?`<div class="inf">${inf}</div>`:""}<div class="fl">${sale.folio}</div><div class="dt">${fmtDate(sale.date)}</div></div><table><thead><tr><th>Prod</th><th style="text-align:right">Cant</th><th style="text-align:right">P.U.</th><th style="text-align:right">Imp</th></tr></thead><tbody>${rows}</tbody></table><div class="tt"><div class="tr"><span>Subtotal:</span><span>${fmt(sale.subtotal)}</span></div><div class="tr"><span>IVA:</span><span>${fmt(sale.iva)}</span></div><div class="tg"><span>TOTAL:</span><span>${fmt(sale.total)}</span></div></div><div class="ft"><b>¡Gracias!</b>Arts: ${sale.items.length} · Terminal</div></div></body></html>`;
+  const html=`<html><head><title>Ticket</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:monospace;font-size:10px;padding:6px;width:260px;margin:0 auto;position:relative}.hd{text-align:center;border-bottom:2px dashed #aaa;padding-bottom:6px;margin-bottom:5px}.st{font-size:12px;font-weight:700}.inf{font-size:7px;color:#666;margin-top:2px;line-height:1.3}.fl{font-size:8px;font-weight:600;margin-top:3px;background:#eee;padding:2px 5px;display:inline-block;border-radius:2px}.dt{font-size:8px;color:#666;margin-top:2px}table{width:100%;border-collapse:collapse;margin:5px 0}th{text-align:left;font-size:7px;font-weight:600;border-bottom:1px solid #333;padding:2px}td{padding:2px;font-size:8px;border-bottom:1px dotted #ccc}.tt{border-top:2px dashed #aaa;padding-top:5px;margin-top:3px}.tr{display:flex;justify-content:space-between;font-size:8px;padding:1px 0}.tg{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:2px;padding-top:3px;border-top:1px solid #333}.ft{text-align:center;margin-top:6px;border-top:2px dashed #aaa;padding-top:5px;font-size:7px;color:#666}.ft b{font-size:9px;color:#111;display:block;margin-bottom:2px}.bd{position:relative;z-index:1}@page{size:58mm auto;margin:0;padding:0}@media print{html,body{width:58mm;height:auto;margin:0!important;padding:1mm!important;overflow:hidden}}</style></head><body>${wm}<div class="bd"><div class="hd">${lt}<div class="st">${sn}</div>${inf?`<div class="inf">${inf}</div>`:""}<div class="fl">${sale.folio}</div><div class="dt">${fmtDate(sale.date)}</div></div><table><thead><tr><th>Prod</th><th style="text-align:right">Cant</th><th style="text-align:right">P.U.</th><th style="text-align:right">Imp</th></tr></thead><tbody>${rows}</tbody></table><div class="tt"><div class="tg"><span>TOTAL:</span><span>${fmt(sale.total)}</span></div></div><div class="ft"><b>¡Gracias!</b>Arts: ${sale.items.length}</div></div></body></html>`;
   // Usar iframe oculto en vez de ventana emergente (no se bloquea en móvil)
   let frame=document.getElementById('print-frame');
   if(!frame){frame=document.createElement('iframe');frame.id='print-frame';frame.style.cssText='position:fixed;top:-9999px;left:-9999px;width:280px;height:0;border:none';document.body.appendChild(frame)}
