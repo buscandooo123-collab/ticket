@@ -151,24 +151,10 @@ body.printing #ticket-modal .modal-actions{display:none!important}
 body.printing .toast{display:none!important}
 
 @media print{
-  @page{size:58mm auto;margin:0}
-  body{width:58mm;margin:0;padding:0}
-  .ticket{font-size:10px;padding:2mm}
-  .ticket-logo-top{width:14mm;height:14mm}
-  .ticket-store{font-size:14px}
-  .ticket-info{font-size:10px;color:#000}
-  .ticket-folio{font-size:10px}
-  .ticket-date{font-size:9px;color:#000}
-  .ticket-header{border-bottom:1px dashed #000;padding-bottom:2mm;margin-bottom:1mm}
-  .ticket-table{margin:1mm 0}
-  .ticket-table th{font-size:9px;border-bottom:1px solid #000;padding:1px}
-  .ticket-table td{font-size:10px;border-bottom:none;padding:1px;color:#000}
-  .ticket-totals{border-top:1px dashed #000;padding-top:1mm;margin-top:1mm}
-  .ticket-total-grand{font-size:14px;border-top:1px solid #000;padding-top:1mm;margin-top:1mm}
-  .ticket-footer{border-top:1px dashed #000;padding-top:1mm;margin-top:2mm}
-  .ticket-footer .thanks{font-size:12px}
-  .ticket-footer p{font-size:9px;color:#000}
-  .ticket-watermark{display:none}
+  .header,.tab-bar,.main,.cart-badge,.toast,.loading-screen{display:none!important}
+  #ticket-modal{display:block!important;position:static!important;background:none!important;backdrop-filter:none!important;padding:0!important;margin:0!important;inset:auto!important}
+  #ticket-modal .modal-sheet{box-shadow:none!important;max-height:none!important;animation:none!important;border-radius:0!important;padding:2px!important;margin:0!important;width:100%!important}
+  #ticket-modal .modal-handle,#ticket-modal .modal-actions{display:none!important}
 }
 </style>
 </head>
@@ -409,14 +395,16 @@ function closeTicket(){$("ticket-modal").classList.add("hidden")}
 
 function printTicket(){
   document.body.classList.add("printing");
-  setTimeout(function(){
-    window.print();
-    setTimeout(function(){
-      document.body.classList.remove("printing");
-      closeTicket();
-      showTab("catalog");
-    },500);
-  },200);
+  var cleaned=false;
+  function done(){
+    if(cleaned)return;cleaned=true;
+    document.body.classList.remove("printing");
+    closeTicket();
+    showTab("catalog");
+  }
+  window.addEventListener("afterprint",function af(){done();window.removeEventListener("afterprint",af)});
+  setTimeout(function(){window.print()},200);
+  setTimeout(done,10000);
 }
 
 // INIT
