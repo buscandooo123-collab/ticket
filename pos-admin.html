@@ -259,8 +259,11 @@ body.printing .toast{display:none!important}
 </div>
 
 <div id="view-history" class="scroll-view hidden">
-  <div class="view-title">📋 Historial <span class="count" id="history-count"></span></div>
-  <input type="text" class="search-input" placeholder="🔍 Buscar..." id="history-search" oninput="renderHistory()">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div class="view-title" style="margin-bottom:0">📋 Historial <span class="count" id="history-count"></span></div>
+    <button class="btn-action" onclick="confirmDeleteAllSales()" style="font-size:12px;padding:8px 14px;background:var(--danger)">🗑 Borrar todo</button>
+  </div>
+  <input type="text" class="search-input" placeholder="🔍 Buscar..." id="history-search" oninput="renderHistory()" style="margin-top:10px">
   <div id="history-list"></div>
 </div>
 
@@ -488,7 +491,7 @@ function removeLogo(){biz.logo="";$("logo-img").style.display="none";$("logo-pla
 function updatePreview(){const op=parseInt($("logo-opacity").value);$("opacity-label").textContent=op+"%";const name=biz.name||"Tu Negocio";const info=[biz.address||"Dirección",biz.phone?"Tel: "+biz.phone:""].filter(Boolean).join(" · ");const lt=biz.logo?`<img class="tlp-logo" src="${biz.logo}">`:"";const wm=biz.logo?`<div class="tlp-watermark"><img src="${biz.logo}" style="opacity:${op/100}"></div>`:"";$("live-preview").innerHTML=`<div class="tlp-badge">Vista previa</div>${wm}<div class="tlp-body"><div class="tlp-header">${lt}<div class="tlp-store">${name}</div><div class="tlp-info">${info}</div><div class="tlp-folio">V-20260226-0001</div></div><div style="margin:6px 0"><div class="tlp-item"><span>Producto ejemplo</span><span>$45.00</span></div><div class="tlp-item"><span>Producto ejemplo 2</span><span>$28.50</span></div></div><div class="tlp-totals"><div class="tlp-grand"><span>TOTAL:</span><span>$73.50</span></div></div><div class="tlp-footer"><b>¡Gracias!</b>Conserve su ticket.</div></div>`}
 
 // VIEWS
-function switchView(v){currentView=v;["pos","history","admin","orders"].forEach(x=>{$("view-"+x).classList.toggle("hidden",x!==v);$("nav-"+x).classList.toggle("active",x===v)});if(v==="admin"){loadBizUI();updatePreview();renderAdmin()}if(v==="pos"){renderCategories();renderProducts()}if(v==="orders"){renderOrders();if(!$("ord-date").value){const d=new Date();$("ord-date").value=d.toISOString().split("T")[0]}}}
+function switchView(v){currentView=v;["pos","history","admin","orders"].forEach(x=>{$("view-"+x).classList.toggle("hidden",x!==v);$("nav-"+x).classList.toggle("active",x===v)});if(v==="admin"){loadBizUI();updatePreview();renderAdmin()}if(v==="pos"){renderCategories();renderProducts()}if(v==="orders"){renderOrders();if(!$("ord-date").value){const d=new Date();$("ord-date").value=d.toISOString().split("T")[0]}}if(v==="history"){renderHistory()}}
 
 // EMOJI
 function toggleEmoji(t){const dd=$("emoji-picker-"+t),o=!dd.classList.contains("hidden");document.querySelectorAll(".emoji-dropdown").forEach(e=>e.classList.add("hidden"));if(o)return;dd.innerHTML=EMOJIS.map(e=>`<button class="emoji-opt" onclick="pickEmoji('${t}','${e}')">${e}</button>`).join("");dd.classList.remove("hidden")}
@@ -523,7 +526,27 @@ function closeTicket(){$("ticket-modal").classList.add("hidden")}
 function printTicket(){document.body.classList.add("printing");var cleaned=false;function done(){if(cleaned)return;cleaned=true;document.body.classList.remove("printing");closeTicket()}window.addEventListener("afterprint",function af(){done();window.removeEventListener("afterprint",af)});setTimeout(function(){window.print()},200);setTimeout(done,10000)}
 
 // HISTORY
-function renderHistory(){const s=$("history-search").value.toLowerCase(),f=salesHistory.filter(x=>x.folio.toLowerCase().includes(s)||x.items.some(i=>i.name.toLowerCase().includes(s)));$("history-count").textContent=salesHistory.length+" ventas";if(!f.length){$("history-list").innerHTML=`<div style="text-align:center;padding:70px;color:var(--text-faint)"><div style="font-size:50px;opacity:.25">📋</div><div style="font-size:14px;margin-top:10px">${!salesHistory.length?"Sin ventas aún":"Sin resultados"}</div></div>`;return}$("history-list").innerHTML=f.map((s,i)=>`<div class="sale-card" onclick="showTicket(salesHistory[${salesHistory.indexOf(s)}])"><div><div class="sale-folio">${s.folio} ${s.source==='terminal'?'📱':''}</div><div class="sale-date">${fmtDate(s.date)}</div><div class="sale-products">${s.items.map(i=>i.name).join(" · ")}</div></div><div><div class="sale-total">${fmt(s.total)}</div><div class="sale-view-link">Ver ticket →</div></div></div>`).join("")}
+function renderHistory(){const s=$("history-search").value.toLowerCase(),f=salesHistory.filter(x=>x.folio.toLowerCase().includes(s)||x.items.some(i=>i.name.toLowerCase().includes(s)));$("history-count").textContent=salesHistory.length+" ventas";if(!f.length){$("history-list").innerHTML=`<div style="text-align:center;padding:70px;color:var(--text-faint)"><div style="font-size:50px;opacity:.25">📋</div><div style="font-size:14px;margin-top:10px">${!salesHistory.length?"Sin ventas aún":"Sin resultados"}</div></div>`;return}$("history-list").innerHTML=f.map((s,i)=>`<div class="sale-card"><div style="flex:1;cursor:pointer" onclick="showTicket(salesHistory[${salesHistory.indexOf(s)}])"><div class="sale-folio">${s.folio} ${s.source==='terminal'?'📱':''}</div><div class="sale-date">${fmtDate(s.date)}</div><div class="sale-products">${s.items.map(i=>i.name).join(" · ")}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="sale-total">${fmt(s.total)}</div><button onclick="event.stopPropagation();confirmDeleteSale('${s.id}','${s.folio}')" style="background:none;border:1px solid var(--danger);color:var(--danger);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">🗑 Borrar</button></div></div>`).join("")}
+
+function confirmDeleteSale(id,folio){
+  $("confirm-title").textContent="🗑 Eliminar Venta";
+  $("confirm-text").textContent=`¿Eliminar la venta "${folio}"?`;
+  $("btn-confirm-yes").onclick=()=>{salesRef.doc(id).delete().then(()=>toast("🗑 Venta eliminada")).catch(e=>toast("⚠️ "+e.message));closeConfirm()};
+  $("confirm-modal").classList.remove("hidden");
+}
+
+function confirmDeleteAllSales(){
+  if(!salesHistory.length){toast("No hay ventas");return}
+  $("confirm-title").textContent="⚠️ Borrar TODO el historial";
+  $("confirm-text").textContent=`¿Estás seguro? Se eliminarán ${salesHistory.length} ventas. Esta acción no se puede deshacer.`;
+  $("btn-confirm-yes").onclick=()=>{
+    const batch=db.batch();
+    salesHistory.forEach(s=>batch.delete(salesRef.doc(s.id)));
+    batch.commit().then(()=>toast("🗑 Historial eliminado")).catch(e=>toast("⚠️ "+e.message));
+    closeConfirm();
+  };
+  $("confirm-modal").classList.remove("hidden");
+}
 
 // ADMIN PRODUCTS
 function renderAdmin(){refreshCatSelects();renderDepts();renderAdminProducts()}
