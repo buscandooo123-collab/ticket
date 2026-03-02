@@ -582,12 +582,41 @@ function savePedido(){
   };
   ordersRef.add(order).then(()=>{
     toast("Pedido guardado");
+    showPedidoTicket(order);
     tempPedItems=[];
     $("p-client").value="";$("p-phone").value="";$("p-date").value="";$("p-time").value="";
     $("p-advance").value="";$("p-notes").value="";
     renderPedItems();
-    showTab("catalog");
   }).catch(e=>toast(e.message));
+}
+
+function showPedidoTicket(o){
+  const sn=biz.name||"Punto de Venta";
+  const rows=(o.items||[]).map(i=>{
+    const cantTxt=i.unit==="pza"&&i.pzKg?`${i.qty}pz (${i.pzKg}pz/kg)`:`${i.qty} ${i.unit}`;
+    const kgTxt=i.kgAprox?`${i.kgAprox} kg`:`${i.qty} kg`;
+    return`<tr><td style="padding:4px;font-size:18px">${i.name}</td><td style="text-align:right;padding:4px;font-size:16px">${cantTxt}</td><td style="text-align:right;padding:4px;font-size:18px;font-weight:600;color:#2563eb">${kgTxt}</td><td style="text-align:right;padding:4px;font-size:18px;font-family:monospace;font-weight:700">${fmt(i.total)}</td></tr>`;
+  }).join("");
+  const totKg=(o.items||[]).reduce((s,i)=>s+(i.kgAprox||i.qty),0);
+  const deliv=o.deliveryDate?new Date(o.deliveryDate+"T"+(o.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+  currentTicketSale={__orderPrint:true};
+  $("ticket-content").innerHTML=`<div class="ticket"><div class="ticket-body">
+    <div class="ticket-header"><div class="ticket-store">${sn}</div><div class="ticket-folio">${o.folio}</div><div class="ticket-date">Creado: ${fmtDate(o.createdAt)}</div></div>
+    <div style="text-align:center;font-size:22px;font-weight:700;margin:8px 0;padding:8px;background:#f0f0f0;border-radius:6px">NOTA DE PEDIDO</div>
+    <div style="font-size:20px;margin:8px 0"><b>Cliente:</b> ${o.client}</div>
+    ${o.phone?`<div style="font-size:16px;color:#333">Tel: ${o.phone}</div>`:""}
+    <div style="font-size:20px;margin:8px 0;padding:8px;background:#fff9e6;border-radius:6px;border-left:4px solid #f59e0b"><b>Entrega:</b> ${deliv}</div>
+    <table class="ticket-table"><thead><tr><th>Producto</th><th style="text-align:right">Cant.</th><th style="text-align:right">Kg</th><th style="text-align:right">Imp.</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="text-align:center;font-size:18px;font-weight:700;color:#2563eb;margin:6px 0;padding:6px;background:#dbeafe;border-radius:6px">Total aprox: ${totKg.toFixed(2)} kg</div>
+    <div class="ticket-totals">
+      <div class="ticket-total-row"><span>Total estimado:</span><span>${fmt(o.total)}</span></div>
+      <div class="ticket-total-row"><span>Anticipo:</span><span>${fmt(o.advance||0)}</span></div>
+      <div class="ticket-total-grand"><span>RESTA:</span><span>${fmt(o.rest||0)}</span></div>
+    </div>
+    ${o.notes?`<div style="font-size:16px;margin-top:8px;padding:8px;background:#f0f0f0;border-radius:6px;font-style:italic">${o.notes}</div>`:""}
+    <div class="ticket-footer"><div class="thanks">¡Gracias!</div></div>
+  </div></div>`;
+  $("ticket-modal").classList.remove("hidden");
 }
 
 // INIT
