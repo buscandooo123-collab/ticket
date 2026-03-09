@@ -708,7 +708,17 @@ renderOrder();updateCartBadge();
 startListeners();
 
 // PWA
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    reg.addEventListener('updatefound',()=>{
+      const nw=reg.installing;
+      nw.addEventListener('statechange',()=>{
+        if(nw.state==='activated')location.reload();
+      });
+    });
+    setInterval(()=>reg.update(),60000);
+  }).catch(()=>{});
+}
 </script>
 </body>
 </html>
