@@ -414,11 +414,11 @@ function renderProducts(){
     <div class="prod-row">
       <div class="prod-info">
         <div class="prod-name">${p.name}</div>
-        <div class="prod-meta">${getPrice(p)<=0?'<span style="color:var(--primary);font-weight:600">Monto libre</span>':(selectedClient&&selectedClient.prices&&selectedClient.prices[p.id]!==undefined?`<span style="text-decoration:line-through;color:var(--text-faint);font-size:11px">${fmt(p.price)}</span> <span style="color:#22c55e;font-weight:700">${fmt(selectedClient.prices[p.id])}</span>`:fmt(p.price))+' / '+p.unit}</div>
+        <div class="prod-meta">${(getPrice(p)<=0||p.unit==="monto")?'<span style="color:var(--primary);font-weight:600">Monto libre</span>':(selectedClient&&selectedClient.prices&&selectedClient.prices[p.id]!==undefined?`<span style="text-decoration:line-through;color:var(--text-faint);font-size:11px">${fmt(p.price)}</span> <span style="color:#22c55e;font-weight:700">${fmt(selectedClient.prices[p.id])}</span>`:fmt(p.price))+' / '+p.unit}</div>
       </div>
-      <span class="prod-badge ${p.unit}">${p.unit==="kg"?"KG":"PZA"}</span>
+      <span class="prod-badge ${p.unit}">${p.unit==="kg"?"KG":p.unit==="monto"?"💲":"PZA"}</span>
       <div class="prod-qty-area">
-        ${getPrice(p)>0?`<input type="number" class="prod-qty-input" id="qi-${p.id}" step="${p.unit==='kg'?'0.1':'1'}" min="0" placeholder="${p.unit==='kg'?'Kg':'#'}" inputmode="decimal" onkeydown="if(event.key==='Enter'){addToOrder('${p.id}');this.blur()}">`:''}
+        ${getPrice(p)>0&&p.unit!=="monto"?`<input type="number" class="prod-qty-input" id="qi-${p.id}" step="${p.unit==='kg'?'0.1':'1'}" min="0" placeholder="${p.unit==='kg'?'Kg':'#'}" inputmode="decimal" onkeydown="if(event.key==='Enter'){addToOrder('${p.id}');this.blur()}">`:''}
         <input type="number" class="prod-total-input" id="ti-${p.id}" step="any" min="0" placeholder="$" inputmode="decimal" onkeydown="if(event.key==='Enter'){addToOrder('${p.id}');this.blur()}">
         <button class="prod-add-btn" onclick="addToOrder('${p.id}')">+</button>
       </div>
@@ -434,7 +434,7 @@ function addToOrder(id){
   const qVal=qEl?parseFloat(qEl.value):0;
   const tVal=tEl?parseFloat(tEl.value):0;
   let qty=0,total=0;
-  if(pr<=0){
+  if(pr<=0||p.unit==="monto"){
     // Productos varios: solo total
     total=tVal;qty=1;
     if(!total||total<=0){toast("Ingresa el monto");return}
