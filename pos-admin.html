@@ -242,7 +242,7 @@ body.printing .toast{display:none!important}
 <div id="view-pos" class="pos-layout">
   <div class="products-panel">
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-      <select class="form-select" id="sel-client" onchange="selectClient(this.value)" style="flex:1;padding:9px 12px;font-size:13px"><option value="">👤 Precio normal (sin cliente)</option></select>
+      <select class="form-select" id="sel-client" onchange="selectClient(this.value)" style="flex:1;padding:9px 12px;font-size:13px"><option value="">👤 Clientes</option></select>
       <span id="client-badge" style="display:none;background:var(--success-light);color:#16a34a;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap"></span>
     </div>
     <input type="text" class="search-input" placeholder="🔍 Buscar producto..." id="product-search" oninput="renderProducts()">
@@ -542,8 +542,8 @@ function refreshCatSelects(){let o="",f=`<option value="all">Todos</option>`;cat
 
 // CATEGORIES BAR
 function renderClientSelector(){
-  let opts='<option value="">👤 Precio normal (sin cliente)</option>';
-  clientsData.forEach(cl=>{const n=Object.keys(cl.prices||{}).length;opts+=`<option value="${cl.id}" ${selectedClient&&selectedClient.id===cl.id?"selected":""}>${cl.name}${n?" ("+n+" precios)":""}</option>`});
+  let opts='<option value="">👤 Clientes</option>';
+  clientsData.forEach(cl=>{const n=Object.keys(cl.prices||{}).length;opts+=`<option value="${cl.id}" ${selectedClient&&selectedClient.id===cl.id?"selected":""}>${cl.name}</option>`});
   $("sel-client").innerHTML=opts;
   const b=$("client-badge");
   if(selectedClient){b.style.display="inline";b.textContent="💲 "+selectedClient.name}else{b.style.display="none"}
