@@ -911,51 +911,50 @@ function toggleClientPrices(id){
   }else{el.style.display="none"}
 }
 
+
 function renderClientPrices(id){
   const c=clientsData.find(x=>x.id===id);if(!c)return;
   const prices=c.prices||{};
-  // Group products by category
   let html=`<div style="margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">`;
   html+=`<div style="font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:8px">Asigna precios especiales (deja vacío para precio normal):</div>`;
   html+=`<table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="background:var(--bg-input)"><th style="text-align:left;padding:6px">Producto</th><th style="text-align:right;padding:6px">Precio normal</th><th style="text-align:right;padding:6px">Precio especial</th><th style="padding:6px"></th></tr></thead><tbody>`;
+    <thead><tr style="background:var(--bg-input)"><th style="text-align:left;padding:6px">Producto</th><th style="text-align:right;padding:6px">Normal</th><th style="text-align:right;padding:6px">Especial</th></tr></thead><tbody>`;
   categories.forEach(cat=>{
     const catProds=products.filter(p=>p.category===cat.id);
     if(!catProds.length)return;
-    html+=`<tr><td colspan="4" style="padding:6px 6px 2px;font-weight:700;color:var(--primary);font-size:12px;border-top:2px solid var(--border-light)">${cat.icon} ${cat.name}</td></tr>`;
+    html+=`<tr><td colspan="3" style="padding:6px 6px 2px;font-weight:700;color:var(--primary);font-size:12px;border-top:2px solid var(--border-light)">${cat.icon} ${cat.name}</td></tr>`;
     catProds.forEach(p=>{
       const sp=prices[p.id];
       const hasPrice=sp!==undefined&&sp!==null&&sp!=="";
       html+=`<tr style="border-bottom:1px solid var(--border-light)">
         <td style="padding:5px 6px;font-weight:600">${p.name} <span style="font-size:10px;color:var(--text-faint)">/${p.unit}</span></td>
         <td style="text-align:right;padding:5px 6px;font-family:var(--font-mono);color:var(--text-dim)">${fmt(p.price)}</td>
-        <td style="text-align:right;padding:5px 6px"><input type="number" step="any" min="0" placeholder="—" value="${hasPrice?sp:""}" 
-          style="width:90px;padding:5px 8px;border:1px solid ${hasPrice?"var(--success)":"var(--border)"};border-radius:6px;font-family:var(--font-mono);font-size:13px;text-align:right;background:${hasPrice?"var(--success-light)":"#fff"};outline:none"
-          onchange="saveClientPrice('${id}','${p.id}',this.value)" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=this.value?'var(--success)':'var(--border)'"></td>
-        <td style="padding:5px 6px;text-align:center">${hasPrice?`<button onclick="removeClientPrice('${id}','${p.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">✕</button>`:""}</td>
+        <td style="text-align:right;padding:5px 6px"><input type="number" step="any" min="0" placeholder="—" value="${hasPrice?sp:""}" data-pid="${p.id}" class="cl-price-input"
+          style="width:90px;padding:5px 8px;border:1px solid ${hasPrice?"var(--success)":"var(--border)"};border-radius:6px;font-family:var(--font-mono);font-size:13px;text-align:right;background:${hasPrice?"var(--success-light)":"#fff"};outline:none"></td>
       </tr>`;
     });
   });
-  html+=`</tbody></table></div>`;
+  html+=`</tbody></table>`;
+  html+=`<div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn-action" onclick="saveAllClientPrices('${id}')" style="flex:1;padding:12px;font-size:14px;background:var(--success)">💾 GUARDAR PRECIOS</button>
+    <button class="btn-action" onclick="toggleClientPrices('${id}')" style="padding:12px;font-size:14px;background:var(--bg-input);color:var(--text-dim)">Cerrar</button>
+  </div></div>`;
   $("cl-prices-"+id).innerHTML=html;
 }
 
-function saveClientPrice(clientId,prodId,val){
-  const price=parseFloat(val);
-  if(!val||isNaN(price)||price<=0){
-    // Remove price if empty or invalid
-    const update={};update["prices."+prodId]=firebase.firestore.FieldValue.delete();
-    clientsRef.doc(clientId).update(update).then(()=>{toast("Precio eliminado");setTimeout(()=>renderClientPrices(clientId),300)});
-    return;
-  }
-  const update={};update["prices."+prodId]=price;
-  clientsRef.doc(clientId).update(update).then(()=>{toast("✅ Precio guardado");setTimeout(()=>renderClientPrices(clientId),300)}).catch(e=>toast("⚠️ "+e.message));
+function saveAllClientPrices(clientId){
+  const inputs=document.querySelectorAll("#cl-prices-"+clientId+" .cl-price-input");
+  const prices={};
+  inputs.forEach(inp=>{
+    const val=parseFloat(inp.value);
+    if(inp.value&&!isNaN(val)&&val>0){prices[inp.dataset.pid]=val}
+  });
+  clientsRef.doc(clientId).update({prices}).then(()=>{
+    toast("✅ Precios guardados");
+    renderClientPrices(clientId);
+  }).catch(e=>toast("⚠️ "+e.message));
 }
 
-function removeClientPrice(clientId,prodId){
-  const update={};update["prices."+prodId]=firebase.firestore.FieldValue.delete();
-  clientsRef.doc(clientId).update(update).then(()=>{toast("Precio eliminado");setTimeout(()=>renderClientPrices(clientId),300)});
-}
 
 function confirmDelClient(id){
   const c=clientsData.find(x=>x.id===id);if(!c)return;
