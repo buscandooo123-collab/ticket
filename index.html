@@ -280,6 +280,7 @@ body.printing .toast{display:none!important}
     <div id="ticket-content"></div>
     <div class="modal-actions">
       <button class="btn-print-m" onclick="printTicket()">🖨️ Imprimir</button>
+      <button class="btn-print-m" onclick="shareWhatsApp()" style="background:#25d366">📲 WhatsApp</button>
       <button class="btn-close-m" onclick="closeTicket()">Cerrar</button>
     </div>
   </div>
@@ -503,6 +504,45 @@ function showTicket(sale){
 
 function closeTicket(){$("ticket-modal").classList.add("hidden")}
 
+function shareWhatsApp(){
+  const s=currentTicketSale;if(!s)return;
+  const sn=biz.name||"Punto de Venta";
+  let txt="";
+  if(s.__orderPrint){
+    // Order note
+    const deliv=s.deliveryDate?new Date(s.deliveryDate+"T"+(s.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+    txt=`📝 *NOTA DE PEDIDO*\n${sn}\n${s.folio}\n\n`;
+    txt+=`*Cliente:* ${s.client}\n`;
+    if(s.phone)txt+=`📱 ${s.phone}\n`;
+    txt+=`📅 *Entrega:* ${deliv}\n\n`;
+    txt+=`*Productos:*\n`;
+    (s.items||[]).forEach(i=>{
+      const kg=i.kgAprox?i.kgAprox+" kg":"";
+      const pz=i.unit==="pza"?i.qty+"pz ":"";
+      txt+=`• ${i.name} — ${pz}${kg} — ${fmt(i.total)}\n`;
+    });
+    const totKg=(s.items||[]).reduce((a,i)=>a+(i.kgAprox||i.qty),0);
+    txt+=`\n⚖️ *Total aprox:* ${totKg.toFixed(2)} kg\n`;
+    txt+=`💰 *Total:* ${fmt(s.total)}\n`;
+    txt+=`💵 *Anticipo:* ${fmt(s.advance||0)}\n`;
+    txt+=`🔴 *Resta:* ${fmt(s.rest||0)}\n`;
+    if(s.notes)txt+=`\n📋 ${s.notes}\n`;
+  }else{
+    // Sale ticket
+    txt=`🧾 *${sn}*\n`;
+    if(biz.address)txt+=`${biz.address}\n`;
+    if(biz.phone)txt+=`Tel: ${biz.phone}\n`;
+    txt+=`${s.folio}\n${fmtDate(s.date)}\n\n`;
+    s.items.forEach(i=>{
+      txt+=`• ${i.name} — ${i.qty} ${i.unit} × ${fmt(i.price)} = *${fmt(i.total)}*\n`;
+    });
+    txt+=`\n💰 *TOTAL: ${fmt(s.total)}*\n`;
+    txt+=`\n¡Gracias por su compra!`;
+  }
+  const url="https://wa.me/?text="+encodeURIComponent(txt);
+  window.open(url,"_blank");
+}
+
 function printTicket(){
   document.body.classList.add("printing");
   var cleaned=false;
@@ -638,7 +678,7 @@ function showPedidoTicket(o){
   }).join("");
   const totKg=(o.items||[]).reduce((s,i)=>s+(i.kgAprox||i.qty),0);
   const deliv=o.deliveryDate?new Date(o.deliveryDate+"T"+(o.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
-  currentTicketSale={__orderPrint:true};
+  currentTicketSale={__orderPrint:true,...o};
   $("ticket-content").innerHTML=`<div class="ticket"><div class="ticket-body">
     <div class="ticket-header"><div class="ticket-store">${sn}</div><div class="ticket-folio">${o.folio}</div><div class="ticket-date">Creado: ${fmtDate(o.createdAt)}</div></div>
     <div style="text-align:center;font-size:30px;font-weight:700;margin:8px 0;padding:8px;background:#f0f0f0;border-radius:6px;color:#000">NOTA DE PEDIDO</div>

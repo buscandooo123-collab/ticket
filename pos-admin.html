@@ -408,7 +408,7 @@ body.printing .toast{display:none!important}
 <div class="modal-overlay hidden" id="ticket-modal" onclick="closeTicket()">
   <div class="modal-content" onclick="event.stopPropagation()">
     <div id="ticket-content"></div>
-    <div class="modal-actions"><button class="btn-print" onclick="printTicket()">🖨️ IMPRIMIR</button><button class="btn-close-modal" onclick="closeTicket()">CERRAR</button></div>
+    <div class="modal-actions"><button class="btn-print" onclick="printTicket()">🖨️ IMPRIMIR</button><button class="btn-print" onclick="shareWhatsApp()" style="background:#25d366;border-color:#25d366">📲 WhatsApp</button><button class="btn-close-modal" onclick="closeTicket()">CERRAR</button></div>
   </div>
 </div>
 
@@ -553,6 +553,43 @@ function completeSale(){if(!orderItems.length)return;const sub=orderItems.reduce
 // TICKET
 function showTicket(sale){currentTicketSale=sale;const tot=sale.total;let rows=sale.items.map(i=>`<tr><td>${i.name}</td><td class="r">${i.qty} ${i.unit}</td><td class="r">${fmt(i.price)}</td><td class="r">${fmt(i.total)}</td></tr>`).join("");const lt=biz.logo?`<img class="ticket-logo-top" src="${biz.logo}">`:"";const wm=biz.logo?`<div class="ticket-watermark"><img src="${biz.logo}" style="opacity:${biz.logoOpacity/100}"></div>`:"";const sn=biz.name||"Punto de Venta";const inf=[biz.address,biz.phone?"Tel: "+biz.phone:""].filter(Boolean).join(" | ");$("ticket-content").innerHTML=`<div class="ticket">${wm}<div class="ticket-body"><div class="ticket-header">${lt}<div class="ticket-store">${sn}</div>${inf?`<div class="ticket-info">${inf}</div>`:""}<div class="ticket-folio">${sale.folio}</div><div class="ticket-date">${fmtDate(sale.date)}</div></div><table class="ticket-table"><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">P.U.</th><th class="r">Imp.</th></tr></thead><tbody>${rows}</tbody></table><div class="ticket-totals"><div class="ticket-total-grand"><span>TOTAL:</span><span>${fmt(tot)}</span></div></div><div class="ticket-footer"><div class="thanks">¡Gracias por su compra!</div><p>Artículos: ${sale.items.length}</p></div></div></div>`;$("ticket-modal").classList.remove("hidden")}
 function closeTicket(){$("ticket-modal").classList.add("hidden")}
+
+function shareWhatsApp(){
+  const s=currentTicketSale;if(!s)return;
+  const sn=biz.name||"Punto de Venta";
+  let txt="";
+  if(s.__orderPrint){
+    const deliv=s.deliveryDate?new Date(s.deliveryDate+"T"+(s.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+    txt=`📝 *NOTA DE PEDIDO*\n${sn}\n${s.folio}\n\n`;
+    txt+=`*Cliente:* ${s.client}\n`;
+    if(s.phone)txt+=`📱 ${s.phone}\n`;
+    txt+=`📅 *Entrega:* ${deliv}\n\n`;
+    txt+=`*Productos:*\n`;
+    (s.items||[]).forEach(i=>{
+      const kg=i.kgAprox?i.kgAprox+" kg":"";
+      const pz=i.unit==="pza"?i.qty+"pz ":"";
+      txt+=`• ${i.name} — ${pz}${kg} — ${fmt(i.total)}\n`;
+    });
+    const totKg=(s.items||[]).reduce((a,i)=>a+(i.kgAprox||i.qty),0);
+    txt+=`\n⚖️ *Total aprox:* ${totKg.toFixed(2)} kg\n`;
+    txt+=`💰 *Total:* ${fmt(s.total)}\n`;
+    txt+=`💵 *Anticipo:* ${fmt(s.advance||0)}\n`;
+    txt+=`🔴 *Resta:* ${fmt(s.rest||0)}\n`;
+    if(s.notes)txt+=`\n📋 ${s.notes}\n`;
+  }else{
+    txt=`🧾 *${sn}*\n`;
+    if(biz.address)txt+=`${biz.address}\n`;
+    if(biz.phone)txt+=`Tel: ${biz.phone}\n`;
+    txt+=`${s.folio}\n${fmtDate(s.date)}\n\n`;
+    s.items.forEach(i=>{
+      txt+=`• ${i.name} — ${i.qty} ${i.unit} × ${fmt(i.price)} = *${fmt(i.total)}*\n`;
+    });
+    txt+=`\n💰 *TOTAL: ${fmt(s.total)}*\n`;
+    txt+=`\n¡Gracias por su compra!`;
+  }
+  const url="https://wa.me/?text="+encodeURIComponent(txt);
+  window.open(url,"_blank");
+}
 function printTicket(){document.body.classList.add("printing");var cleaned=false;function done(){if(cleaned)return;cleaned=true;document.body.classList.remove("printing");closeTicket()}window.addEventListener("afterprint",function af(){done();window.removeEventListener("afterprint",af)});setTimeout(function(){window.print()},200);setTimeout(done,10000)}
 
 // HISTORY
@@ -808,7 +845,7 @@ function printOrderNote(id){
   }).join("");
   const totKg=(o.items||[]).reduce((s,i)=>s+(i.kgAprox||i.qty),0);
   const deliv=o.deliveryDate?new Date(o.deliveryDate+"T"+(o.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
-  currentTicketSale={__orderPrint:true};
+  currentTicketSale={__orderPrint:true,...o};
   $("ticket-content").innerHTML=`<div class="ticket"><div class="ticket-body">
     <div class="ticket-header"><div class="ticket-store">${sn}</div><div class="ticket-folio">${o.folio}</div><div class="ticket-date">Creado: ${fmtDate(o.createdAt)}</div></div>
     <div style="text-align:center;font-size:22px;font-weight:700;margin:8px 0;padding:8px;background:#f0f0f0;border-radius:6px">📝 NOTA DE PEDIDO</div>
