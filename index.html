@@ -204,6 +204,10 @@ body.printing .toast{display:none!important}
 <div class="main">
   <!-- CATALOG -->
   <div class="catalog-view" id="view-catalog">
+    <div id="client-selector" style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+      <select class="form-select" id="sel-client" onchange="selectClient(this.value)" style="flex:1;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:var(--font-display);color:var(--text)"><option value="">👤 Precio normal (sin cliente)</option></select>
+      <span id="client-badge" style="display:none;background:var(--primary-light);color:var(--primary-dark);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap"></span>
+    </div>
     <input type="text" class="search-bar" placeholder="🔍 Buscar producto..." id="search" oninput="renderProducts()">
     <div class="cats-scroll" id="cats-bar"></div>
     <div class="prod-list" id="prod-list"></div>
@@ -302,9 +306,10 @@ const catsRef = db.collection("categories");
 const prodsRef = db.collection("products");
 const salesRef = db.collection("sales");
 const ordersRef = db.collection("orders");
+const clientsRef = db.collection("clients");
 
 let biz={name:"",address:"",phone:"",logo:"",logoOpacity:15};
-let categories=[],products=[],orderItems=[];
+let categories=[],products=[],orderItems=[],clientsData=[],selectedClient=null;
 let selectedCat="all",currentTab="catalog",currentTicketSale=null;
 
 function fmt(n){return"$"+n.toFixed(2)}
@@ -358,6 +363,40 @@ function renderCats(){
 }
 
 // PRODUCTS
+
+function renderClientSelector(){
+  let opts='<option value="">👤 Precio normal (sin cliente)</option>';
+  clientsData.forEach(cl=>{
+    const n=Object.keys(cl.prices||{}).length;
+    opts+=`<option value="${cl.id}" ${selectedClient&&selectedClient.id===cl.id?"selected":""}>${cl.name}${n?" ("+n+" precios)":""}</option>`;
+  });
+  $("sel-client").innerHTML=opts;
+  const badge=$("client-badge");
+  if(selectedClient){badge.style.display="inline";badge.textContent="💲 "+selectedClient.name}
+  else{badge.style.display="none"}
+}
+
+function selectClient(id){
+  selectedClient=id?clientsData.find(x=>x.id===id):null;
+  renderClientSelector();
+  renderProducts();
+  // Update existing order items with new prices
+  if(orderItems.length){
+    orderItems.forEach(it=>{
+      const p=products.find(x=>x.id===it.pid);
+      if(p){it.price=getPrice(p);it.total=it.qty*it.price}
+    });
+    renderOrder();
+  }
+}
+
+function getPrice(p){
+  if(selectedClient&&selectedClient.prices&&selectedClient.prices[p.id]!==undefined){
+    return selectedClient.prices[p.id];
+  }
+  return p.price;
+}
+
 function renderProducts(){
   const s=$("search").value.toLowerCase();
   const f=products.filter(p=>(selectedCat==="all"||p.category===selectedCat)&&p.name.toLowerCase().includes(s));
@@ -366,7 +405,7 @@ function renderProducts(){
     <div class="prod-row">
       <div class="prod-info">
         <div class="prod-name">${p.name}</div>
-        <div class="prod-meta">${fmt(p.price)} / ${p.unit}</div>
+        <div class="prod-meta">${selectedClient&&selectedClient.prices&&selectedClient.prices[p.id]!==undefined?`<span style="text-decoration:line-through;color:var(--text-faint);font-size:11px">${fmt(p.price)}</span> <span style="color:#22c55e;font-weight:700">${fmt(selectedClient.prices[p.id])}</span>`:fmt(p.price)} / ${p.unit}</div>
       </div>
       <span class="prod-badge ${p.unit}">${p.unit==="kg"?"KG":"PZA"}</span>
       <div class="prod-qty-area">
@@ -381,8 +420,8 @@ function addToOrder(id){
   const p=products.find(x=>x.id===id);if(!p)return;
   const el=$("qi-"+id);const qty=parseFloat(el.value)||(p.unit==="kg"?1:1);
   const ex=orderItems.find(i=>i.pid===id);
-  if(ex){ex.qty+=qty;ex.total=ex.qty*ex.price}
-  else orderItems.push({pid:p.id,name:p.name,price:p.price,unit:p.unit,qty,total:qty*p.price});
+  if(ex){ex.qty+=qty;const pr=getPrice(p);ex.price=pr;ex.total=ex.qty*pr}
+  else{const pr=getPrice(p);orderItems.push({pid:p.id,name:p.name,price:pr,unit:p.unit,qty,total:qty*pr})}
   el.value="";
   updateCartBadge();
   toast("✅ "+p.name);

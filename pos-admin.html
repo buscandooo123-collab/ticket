@@ -165,8 +165,8 @@ body{min-height:100vh;background:var(--bg);font-family:var(--font-display);color
 
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px)}
 .modal-content{background:#fff;border-radius:16px;padding:24px;max-width:420px;width:92%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.15)}
-.confirm-modal{background:var(--bg-card);border-radius:16px;padding:24px;max-width:380px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,0.15);border:1px solid var(--border)}
-.confirm-title{font-size:17px;font-weight:700;color:var(--danger);margin-bottom:10px}
+.confirm-modal{background:var(--bg-card);border-radius:16px;padding:24px;max-width:420px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,0.15);border:1px solid var(--border)}
+.confirm-title{font-size:17px;font-weight:700;margin-bottom:10px}
 .confirm-text{font-size:14px;color:var(--text-dim);margin-bottom:18px;line-height:1.5}
 .confirm-actions{display:flex;gap:10px}
 .btn-confirm-yes{flex:1;padding:11px;background:var(--danger-light);color:var(--danger);border:1px solid #fecaca;border-radius:10px;cursor:pointer;font-weight:700;font-size:13px}
@@ -232,6 +232,7 @@ body.printing .toast{display:none!important}
   <nav class="header-nav">
     <button class="nav-btn active" onclick="switchView('pos')" id="nav-pos">💰 Venta</button>
     <button class="nav-btn" onclick="switchView('orders')" id="nav-orders">📝 Pedidos</button>
+    <button class="nav-btn" onclick="switchView('clients')" id="nav-clients">👥 Clientes</button>
     <button class="nav-btn" onclick="switchView('history')" id="nav-history">📋 Historial</button>
     <button class="nav-btn" onclick="switchView('admin')" id="nav-admin">⚙️ Config</button>
   </nav>
@@ -324,6 +325,28 @@ body.printing .toast{display:none!important}
   </div>
 </div>
 
+
+<div id="view-clients" class="scroll-view hidden">
+  <div class="view-title">👥 Clientes con Precios Especiales <span class="count" id="clients-count"></span></div>
+
+  <!-- NUEVO CLIENTE -->
+  <div class="admin-section">
+    <div class="admin-section-title">➕ Nuevo Cliente</div>
+    <div class="form-row">
+      <div class="form-group grow"><label class="form-label">Nombre</label><input type="text" class="form-input" id="cl-name" placeholder="Nombre del cliente"></div>
+      <div class="form-group grow"><label class="form-label">Teléfono</label><input type="text" class="form-input" id="cl-phone" placeholder="(opcional)"></div>
+      <div class="form-group"><label class="form-label">&nbsp;</label><button class="btn-action" onclick="addClient()">➕ Agregar</button></div>
+    </div>
+  </div>
+
+  <!-- LISTA DE CLIENTES -->
+  <div class="admin-section">
+    <div class="admin-section-title"><span>📋 Clientes Registrados</span></div>
+    <input type="text" class="search-input" placeholder="🔍 Buscar cliente..." id="clients-search" oninput="renderClients()">
+    <div id="clients-list"></div>
+  </div>
+</div>
+
 <div id="view-admin" class="scroll-view hidden">
   <div class="view-title">⚙️ Configuración</div>
   <div class="admin-section">
@@ -369,7 +392,7 @@ body.printing .toast{display:none!important}
     <div class="admin-section-title"><span>📦 Productos</span><span class="count-badge" id="admin-product-count">0</span></div>
     <div class="form-row">
       <div class="form-group grow"><label class="form-label">Nombre</label><input type="text" class="form-input" id="new-name" placeholder="Producto"></div>
-      <div class="form-group"><label class="form-label">Precio</label><input type="number" class="form-input" id="new-price" placeholder="0.00" step="0.5" min="0" style="width:100px"></div>
+      <div class="form-group"><label class="form-label">Precio</label><input type="number" class="form-input" id="new-price" placeholder="0.00" step="any" min="0" style="width:100px"></div>
       <div class="form-group"><label class="form-label">Unidad</label><select class="form-select" id="new-unit" style="width:95px"><option value="kg">⚖️ Kg</option><option value="pza">📦 Pza</option></select></div>
       <div class="form-group"><label class="form-label">Depto</label><select class="form-select" id="new-category"></select></div>
       <div class="form-group"><label class="form-label">&nbsp;</label><button class="btn-action" onclick="addProduct()">➕ Agregar</button></div>
@@ -419,12 +442,13 @@ const catsRef = db.collection("categories");
 const prodsRef = db.collection("products");
 const salesRef = db.collection("sales");
 const ordersRef = db.collection("orders");
+const clientsRef = db.collection("clients");
 
 // STATE
 const EMOJIS=["🏪","🍎","🥬","🥩","🧀","🛒","🥤","🧹","🧴","🐟","🍞","🥚","🌶️","🫘","🥫","🍬","🍺","🧊","🐔","🐷","🐄","🥛","🍕","🏠","🔧","💊","🧸","📦","🎁","✨","🌮","🥑","🍌","🍊","🫒","🍗","🧈","🍚","🥜","☕"];
 let biz={name:"",address:"",phone:"",logo:"",logoOpacity:15};
 let categories=[],products=[],salesHistory=[],orderItems=[];
-let pendingOrders=[],tempOrderItems=[];
+let pendingOrders=[],tempOrderItems=[],clientsData=[];
 let currentView="pos",selectedCat="all",currentTicketSale=null,editingProdId=null,editingDeptId=null,newDeptIcon="🏪";
 
 // HELPERS
@@ -470,6 +494,12 @@ function startListeners(){
     if(currentView==="orders")renderOrders();
   });
 
+  // Clients
+  clientsRef.orderBy("name").onSnapshot(snap=>{
+    clientsData=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(currentView==="clients")renderClients();
+  });
+
   // Connection status
   $("sync-dot").classList.add("on");
   $("sync-label").textContent="Conectado";
@@ -491,7 +521,7 @@ function removeLogo(){biz.logo="";$("logo-img").style.display="none";$("logo-pla
 function updatePreview(){const op=parseInt($("logo-opacity").value);$("opacity-label").textContent=op+"%";const name=biz.name||"Tu Negocio";const info=[biz.address||"Dirección",biz.phone?"Tel: "+biz.phone:""].filter(Boolean).join(" · ");const lt=biz.logo?`<img class="tlp-logo" src="${biz.logo}">`:"";const wm=biz.logo?`<div class="tlp-watermark"><img src="${biz.logo}" style="opacity:${op/100}"></div>`:"";$("live-preview").innerHTML=`<div class="tlp-badge">Vista previa</div>${wm}<div class="tlp-body"><div class="tlp-header">${lt}<div class="tlp-store">${name}</div><div class="tlp-info">${info}</div><div class="tlp-folio">V-20260226-0001</div></div><div style="margin:6px 0"><div class="tlp-item"><span>Producto ejemplo</span><span>$45.00</span></div><div class="tlp-item"><span>Producto ejemplo 2</span><span>$28.50</span></div></div><div class="tlp-totals"><div class="tlp-grand"><span>TOTAL:</span><span>$73.50</span></div></div><div class="tlp-footer"><b>¡Gracias!</b>Conserve su ticket.</div></div>`}
 
 // VIEWS
-function switchView(v){currentView=v;["pos","history","admin","orders"].forEach(x=>{$("view-"+x).classList.toggle("hidden",x!==v);$("nav-"+x).classList.toggle("active",x===v)});if(v==="admin"){loadBizUI();updatePreview();renderAdmin()}if(v==="pos"){renderCategories();renderProducts()}if(v==="orders"){renderOrders();if(!$("ord-date").value){const d=new Date();$("ord-date").value=d.toISOString().split("T")[0]}}if(v==="history"){renderHistory()}}
+function switchView(v){currentView=v;["pos","history","admin","orders","clients"].forEach(x=>{$("view-"+x).classList.toggle("hidden",x!==v);$("nav-"+x).classList.toggle("active",x===v)});if(v==="admin"){loadBizUI();updatePreview();renderAdmin()}if(v==="pos"){renderCategories();renderProducts()}if(v==="orders"){renderOrders();if(!$("ord-date").value){const d=new Date();$("ord-date").value=d.toISOString().split("T")[0]}}if(v==="history"){renderHistory()}if(v==="clients"){renderClients()}}
 
 // EMOJI
 function toggleEmoji(t){const dd=$("emoji-picker-"+t),o=!dd.classList.contains("hidden");document.querySelectorAll(".emoji-dropdown").forEach(e=>e.classList.add("hidden"));if(o)return;dd.innerHTML=EMOJIS.map(e=>`<button class="emoji-opt" onclick="pickEmoji('${t}','${e}')">${e}</button>`).join("");dd.classList.remove("hidden")}
@@ -551,10 +581,34 @@ function confirmDeleteAllSales(){
 // ADMIN PRODUCTS
 function renderAdmin(){refreshCatSelects();renderDepts();renderAdminProducts()}
 function renderAdminProducts(){const s=($("admin-search")?$("admin-search").value:"").toLowerCase(),fc=$("admin-filter-cat")?$("admin-filter-cat").value:"all",f=products.filter(p=>(fc==="all"||p.category===fc)&&p.name.toLowerCase().includes(s));$("admin-product-count").textContent=products.length;if(!products.length){$("admin-product-list").innerHTML=`<div style="text-align:center;padding:36px;color:var(--text-faint)">${categories.length?"Agrega productos ☝️":"Primero agrega un departamento"}</div>`;return}if(!f.length){$("admin-product-list").innerHTML=`<div style="text-align:center;padding:24px;color:var(--text-faint)">Sin resultados</div>`;return}$("admin-product-list").innerHTML=`<table class="data-table"><thead><tr><th>#</th><th>Producto</th><th>Precio</th><th>Unidad</th><th>Depto</th><th>Acciones</th></tr></thead><tbody>${f.map((p,i)=>`<tr><td style="color:var(--primary);font-family:var(--font-mono);font-size:11px">${i+1}</td><td style="font-weight:600">${p.name}</td><td style="font-family:var(--font-mono);color:var(--primary)">${fmt(p.price)}</td><td><span class="unit-badge ${p.unit}">${p.unit==="kg"?"⚖️ KG":"📦 PZA"}</span></td><td style="font-size:12px;color:var(--text-dim)">${getCatLabel(p.category)}</td><td><button class="btn-edit-sm" onclick="editProd('${p.id}')">✏️</button><button class="btn-delete-sm" onclick="confirmDelProd('${p.id}')">🗑</button></td></tr>`).join("")}</tbody></table>`}
-function addProduct(){const name=$("new-name").value.trim(),price=parseFloat($("new-price").value),unit=$("new-unit").value,cat=$("new-category").value;if(!name){toast("⚠️ Nombre");return}if(!price||price<=0){toast("⚠️ Precio");return}if(!cat){toast("⚠️ Depto");return}prodsRef.add({name,price,unit,category:cat}).then(()=>{$("new-name").value="";$("new-price").value="";toast("✅ "+name)}).catch(e=>toast("⚠️ "+e.message))}
-function editProd(id){const p=products.find(x=>x.id===id);if(!p)return;const name=prompt("Nombre:",p.name);if(!name)return;const price=parseFloat(prompt("Precio:",p.price));if(!price)return;prodsRef.doc(id).update({name,price}).then(()=>toast("✅ Actualizado"))}
-function confirmDelProd(id){const p=products.find(x=>x.id===id);if(!p)return;$("confirm-title").textContent="🗑 Eliminar";$("confirm-text").textContent=`¿Eliminar "${p.name}"?`;$("btn-confirm-yes").onclick=()=>{prodsRef.doc(id).delete();closeConfirm();toast("🗑 Eliminado")};$("confirm-modal").classList.remove("hidden")}
-function closeConfirm(){$("confirm-modal").classList.add("hidden")}
+function addProduct(){const name=$("new-name").value.trim(),price=parseFloat($("new-price").value),unit=$("new-unit").value,cat=$("new-category").value;if(!name){toast("⚠️ Nombre");return}if(!price||price<=0){toast("⚠️ Precio");return}if(!cat){toast("⚠️ Depto");return}const dup=products.find(p=>p.name.toLowerCase()===name.toLowerCase()&&p.category===cat);if(dup){toast("⚠️ Ya existe \""+name+"\" en ese departamento");return}prodsRef.add({name,price,unit,category:cat}).then(()=>{$("new-name").value="";$("new-price").value="";$("admin-filter-cat").value=cat;toast("✅ "+name);renderAdminProducts()}).catch(e=>toast("⚠️ "+e.message))}
+function editProd(id){
+  const p=products.find(x=>x.id===id);if(!p)return;
+  let catOpts=categories.map(c=>`<option value="${c.id}" ${c.id===p.category?"selected":""}>${c.icon} ${c.name}</option>`).join("");
+  $("confirm-title").textContent="✏️ Editar Producto";
+  $("confirm-title").style.color="var(--primary)";
+  $("confirm-text").innerHTML=`
+    <div style="text-align:left">
+      <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:3px">NOMBRE</label><input type="text" class="form-input" id="edit-prod-name" value="${p.name}"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:1"><label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:3px">PRECIO</label><input type="number" class="form-input" id="edit-prod-price" value="${p.price}" step="any" min="0"></div>
+        <div style="flex:0 0 90px"><label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:3px">UNIDAD</label><select class="form-select" id="edit-prod-unit"><option value="kg" ${p.unit==="kg"?"selected":""}>⚖️ Kg</option><option value="pza" ${p.unit==="pza"?"selected":""}>📦 Pza</option></select></div>
+      </div>
+      <div style="margin-bottom:4px"><label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:3px">DEPARTAMENTO</label><select class="form-select" id="edit-prod-cat">${catOpts}</select></div>
+    </div>`;
+  $("btn-confirm-yes").textContent="💾 Guardar";
+  $("btn-confirm-yes").style.background="var(--success-light)";
+  $("btn-confirm-yes").style.color="var(--success)";
+  $("btn-confirm-yes").style.borderColor="#86efac";
+  $("btn-confirm-yes").onclick=()=>{
+    const nn=$("edit-prod-name").value.trim(),np=parseFloat($("edit-prod-price").value),nu=$("edit-prod-unit").value,nc=$("edit-prod-cat").value;
+    if(!nn){toast("⚠️ Nombre");return}if(!np||np<=0){toast("⚠️ Precio");return}
+    prodsRef.doc(id).update({name:nn,price:np,unit:nu,category:nc}).then(()=>{toast("✅ Actualizado");closeConfirm()}).catch(e=>toast("⚠️ "+e.message));
+  };
+  $("confirm-modal").classList.remove("hidden");
+}
+function confirmDelProd(id){const p=products.find(x=>x.id===id);if(!p)return;$("confirm-title").textContent="🗑 Eliminar";$("confirm-text").textContent=`¿Eliminar "${p.name}"?`;$("btn-confirm-yes").textContent="Sí, eliminar";$("btn-confirm-yes").onclick=()=>{prodsRef.doc(id).delete();closeConfirm();toast("🗑 Eliminado")};$("confirm-modal").classList.remove("hidden")}
+function closeConfirm(){$("confirm-modal").classList.add("hidden");$("btn-confirm-yes").textContent="Sí, eliminar";$("confirm-title").style.color="var(--danger)";$("btn-confirm-yes").style.background="var(--danger-light)";$("btn-confirm-yes").style.color="var(--danger)";$("btn-confirm-yes").style.borderColor="#fecaca"}
 
 // =============================================
 // 📝 PEDIDOS (ORDERS)
@@ -772,6 +826,108 @@ function printOrderNote(id){
     <div class="ticket-footer"><div class="thanks">¡Gracias!</div></div>
   </div></div>`;
   $("ticket-modal").classList.remove("hidden");
+}
+
+// CLIENTS
+function addClient(){
+  const name=$("cl-name").value.trim();
+  if(!name){toast("⚠️ Nombre del cliente");return}
+  const dup=clientsData.find(c=>c.name.toLowerCase()===name.toLowerCase());
+  if(dup){toast("⚠️ Ya existe \""+name+"\"");return}
+  clientsRef.add({name,phone:$("cl-phone").value.trim(),prices:{}}).then(()=>{
+    $("cl-name").value="";$("cl-phone").value="";toast("✅ "+name+" agregado");
+  }).catch(e=>toast("⚠️ "+e.message));
+}
+
+function renderClients(){
+  const s=$("clients-search")?$("clients-search").value.toLowerCase():"";
+  const filtered=clientsData.filter(c=>c.name.toLowerCase().includes(s));
+  $("clients-count").textContent=clientsData.length+" clientes";
+  if(!filtered.length){
+    $("clients-list").innerHTML=`<div style="text-align:center;padding:50px;color:var(--text-faint)"><div style="font-size:50px;opacity:.25">👥</div><div style="font-size:14px;margin-top:10px">${!clientsData.length?"Sin clientes aún":"Sin resultados"}</div></div>`;
+    return;
+  }
+  $("clients-list").innerHTML=filtered.map(c=>{
+    const numPrices=Object.keys(c.prices||{}).length;
+    return`<div class="sale-card" style="flex-direction:column;cursor:default">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;font-size:15px">${c.name}</div>
+          ${c.phone?`<div style="font-size:12px;color:var(--text-dim)">📱 ${c.phone}</div>`:""}
+          <div style="font-size:11px;color:var(--text-faint);margin-top:2px">💲 ${numPrices} precio${numPrices!==1?"s":""} asignado${numPrices!==1?"s":""}</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn-action" onclick="toggleClientPrices('${c.id}')" style="font-size:11px;padding:6px 12px;background:var(--primary)">💲 Precios</button>
+          <button class="btn-action" onclick="confirmDelClient('${c.id}')" style="font-size:11px;padding:6px 10px;background:var(--danger)">🗑</button>
+        </div>
+      </div>
+      <div id="cl-prices-${c.id}" style="display:none"></div>
+    </div>`;
+  }).join("");
+}
+
+function toggleClientPrices(id){
+  const el=$("cl-prices-"+id);
+  if(el.style.display==="none"){
+    el.style.display="block";
+    renderClientPrices(id);
+  }else{el.style.display="none"}
+}
+
+function renderClientPrices(id){
+  const c=clientsData.find(x=>x.id===id);if(!c)return;
+  const prices=c.prices||{};
+  // Group products by category
+  let html=`<div style="margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">`;
+  html+=`<div style="font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:8px">Asigna precios especiales (deja vacío para precio normal):</div>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--bg-input)"><th style="text-align:left;padding:6px">Producto</th><th style="text-align:right;padding:6px">Precio normal</th><th style="text-align:right;padding:6px">Precio especial</th><th style="padding:6px"></th></tr></thead><tbody>`;
+  categories.forEach(cat=>{
+    const catProds=products.filter(p=>p.category===cat.id);
+    if(!catProds.length)return;
+    html+=`<tr><td colspan="4" style="padding:6px 6px 2px;font-weight:700;color:var(--primary);font-size:12px;border-top:2px solid var(--border-light)">${cat.icon} ${cat.name}</td></tr>`;
+    catProds.forEach(p=>{
+      const sp=prices[p.id];
+      const hasPrice=sp!==undefined&&sp!==null&&sp!=="";
+      html+=`<tr style="border-bottom:1px solid var(--border-light)">
+        <td style="padding:5px 6px;font-weight:600">${p.name} <span style="font-size:10px;color:var(--text-faint)">/${p.unit}</span></td>
+        <td style="text-align:right;padding:5px 6px;font-family:var(--font-mono);color:var(--text-dim)">${fmt(p.price)}</td>
+        <td style="text-align:right;padding:5px 6px"><input type="number" step="any" min="0" placeholder="—" value="${hasPrice?sp:""}" 
+          style="width:90px;padding:5px 8px;border:1px solid ${hasPrice?"var(--success)":"var(--border)"};border-radius:6px;font-family:var(--font-mono);font-size:13px;text-align:right;background:${hasPrice?"var(--success-light)":"#fff"};outline:none"
+          onchange="saveClientPrice('${id}','${p.id}',this.value)" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor=this.value?'var(--success)':'var(--border)'"></td>
+        <td style="padding:5px 6px;text-align:center">${hasPrice?`<button onclick="removeClientPrice('${id}','${p.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">✕</button>`:""}</td>
+      </tr>`;
+    });
+  });
+  html+=`</tbody></table></div>`;
+  $("cl-prices-"+id).innerHTML=html;
+}
+
+function saveClientPrice(clientId,prodId,val){
+  const price=parseFloat(val);
+  if(!val||isNaN(price)||price<=0){
+    // Remove price if empty or invalid
+    const update={};update["prices."+prodId]=firebase.firestore.FieldValue.delete();
+    clientsRef.doc(clientId).update(update).then(()=>{toast("Precio eliminado");setTimeout(()=>renderClientPrices(clientId),300)});
+    return;
+  }
+  const update={};update["prices."+prodId]=price;
+  clientsRef.doc(clientId).update(update).then(()=>{toast("✅ Precio guardado");setTimeout(()=>renderClientPrices(clientId),300)}).catch(e=>toast("⚠️ "+e.message));
+}
+
+function removeClientPrice(clientId,prodId){
+  const update={};update["prices."+prodId]=firebase.firestore.FieldValue.delete();
+  clientsRef.doc(clientId).update(update).then(()=>{toast("Precio eliminado");setTimeout(()=>renderClientPrices(clientId),300)});
+}
+
+function confirmDelClient(id){
+  const c=clientsData.find(x=>x.id===id);if(!c)return;
+  $("confirm-title").textContent="🗑 Eliminar Cliente";
+  $("confirm-title").style.color="var(--danger)";
+  $("confirm-text").textContent=`¿Eliminar "${c.name}" y todos sus precios especiales?`;
+  $("btn-confirm-yes").textContent="Sí, eliminar";
+  $("btn-confirm-yes").onclick=()=>{clientsRef.doc(id).delete();closeConfirm();toast("🗑 Eliminado")};
+  $("confirm-modal").classList.remove("hidden");
 }
 
 // INIT
