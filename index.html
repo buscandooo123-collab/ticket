@@ -209,6 +209,7 @@ body.printing .toast{display:none!important}
   <div class="catalog-view" id="view-catalog">
     <div id="client-selector" style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
       <select class="form-select" id="sel-client" onchange="selectClient(this.value)" style="flex:1;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:var(--font-display);color:var(--text)"><option value="">👤 Clientes</option></select>
+      <button id="btn-varios" onclick="toggleModoVarios()" style="padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;font-family:var(--font-display);cursor:pointer;border:2px solid var(--border);background:var(--bg-input);color:var(--text-dim);white-space:nowrap">🛒 Varios</button>
       <span id="client-badge" style="display:none;background:var(--primary-light);color:var(--primary-dark);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap"></span>
     </div>
     <input type="text" class="search-bar" placeholder="🔍 Buscar producto..." id="search" oninput="renderProducts()">
@@ -221,8 +222,9 @@ body.printing .toast{display:none!important}
     <div class="order-list" id="order-list"></div>
     <div class="order-footer">
       <div class="totals-compact">
-        <div class="totals-row"><span>Subtotal:</span><span id="t-sub">$0.00</span></div>
-        <div class="totals-grand"><span>TOTAL:</span><span id="t-total">$0.00</span></div>
+        <div class="totals-row" id="row-sub"><span>Subtotal:</span><span id="t-sub">$0.00</span></div>
+        <div class="totals-grand" id="row-total"><span>TOTAL:</span><span id="t-total">$0.00</span></div>
+        <div class="totals-grand" id="row-varios" style="display:none"><span>TOTAL:</span><input type="number" id="varios-total-input" step="any" min="0" placeholder="$ Ingresa total" style="width:120px;padding:8px;text-align:right;font-size:18px;font-weight:700;font-family:var(--font-mono);border:2px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;outline:none"></div>
       </div>
       <div class="btn-row">
         <button class="btn-cancel-m" id="btn-cancel" disabled onclick="cancelOrder()">🗑</button>
@@ -313,7 +315,7 @@ const ordersRef = db.collection("orders");
 const clientsRef = db.collection("clients");
 
 let biz={name:"",address:"",phone:"",logo:"",logoOpacity:15};
-let categories=[],products=[],orderItems=[],clientsData=[],selectedClient=null;
+let categories=[],products=[],orderItems=[],clientsData=[],selectedClient=null,modoVarios=false;
 let selectedCat="all",currentTab="catalog",currentTicketSale=null;
 
 function fmt(n){return"$"+n.toFixed(2)}
@@ -373,6 +375,21 @@ function renderCats(){
 
 // PRODUCTS
 
+function toggleModoVarios(){
+  modoVarios=!modoVarios;
+  const btn=$("btn-varios");
+  if(modoVarios){
+    btn.style.background="#f59e0b";btn.style.color="#fff";btn.style.borderColor="#f59e0b";
+    btn.textContent="🛒 Varios ✓";
+    orderItems=[];updateCartBadge();
+  }else{
+    btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)";btn.style.borderColor="var(--border)";
+    btn.textContent="🛒 Varios";
+    orderItems=[];updateCartBadge();
+  }
+  renderProducts();
+}
+
 function renderClientSelector(){
   let opts='<option value="">👤 Clientes</option>';
   clientsData.forEach(cl=>{
@@ -410,6 +427,17 @@ function renderProducts(){
   const s=$("search").value.toLowerCase();
   const f=products.filter(p=>(selectedCat==="all"||p.category===selectedCat)&&p.name.toLowerCase().includes(s));
   if(!f.length){$("prod-list").innerHTML=`<div style="text-align:center;padding:50px 20px;color:var(--text-faint)"><div style="font-size:40px;opacity:.3">${products.length?"🔍":"📦"}</div><div style="font-size:13px;margin-top:8px">${products.length?"Sin resultados":"Sin productos"}</div></div>`;return}
+  if(modoVarios){
+    $("prod-list").innerHTML=f.map(p=>`
+      <div class="prod-row" onclick="addVarios('${p.id}')" style="cursor:pointer">
+        <div class="prod-info">
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-meta" style="color:#f59e0b;font-weight:600">Toca para agregar</div>
+        </div>
+        <button class="prod-add-btn" onclick="event.stopPropagation();addVarios('${p.id}')">+</button>
+      </div>`).join("");
+    return;
+  }
   $("prod-list").innerHTML=f.map(p=>`
     <div class="prod-row">
       <div class="prod-info">
@@ -426,6 +454,15 @@ function renderProducts(){
 }
 
 // ORDER
+function addVarios(id){
+  const p=products.find(x=>x.id===id);if(!p)return;
+  const ex=orderItems.find(i=>i.pid===id);
+  if(ex){toast("Ya está en la lista");return}
+  orderItems.push({pid:p.id,name:p.name,price:0,unit:"varios",qty:1,total:0});
+  updateCartBadge();
+  toast("✅ "+p.name);
+}
+
 function addToOrder(id){
   const p=products.find(x=>x.id===id);if(!p)return;
   const pr=getPrice(p);
@@ -461,7 +498,7 @@ function updateQty(id,q){
   if(i){i.qty=parseFloat(q.toFixed(2));i.total=i.qty*i.price;renderOrder()}
 }
 
-function cancelOrder(){orderItems=[];renderOrder();updateCartBadge()}
+function cancelOrder(){orderItems=[];if(modoVarios)toggleModoVarios();renderOrder();updateCartBadge()}
 
 function updateCartBadge(){
   const n=orderItems.length;
@@ -473,11 +510,16 @@ function updateCartBadge(){
 
 function renderOrder(){
   const n=orderItems.length;
-  $("btn-cancel").disabled=!n;$("btn-charge").disabled=!n;
+  $("btn-cancel").disabled=!n;$("btn-charge").disabled=!(n||(modoVarios));
   $("tab-order-count").textContent=n?`(${n})`:"";
 
   if(!n){
     $("order-list").innerHTML=`<div class="order-empty"><div style="font-size:44px;opacity:.25">🛒</div><div style="font-size:14px;margin-top:8px">Lista vacía</div><div style="font-size:11px;color:var(--text-faint);margin-top:4px">Agrega productos desde 🏪</div></div>`;
+  } else if(modoVarios){
+    $("order-list").innerHTML=orderItems.map((it,i)=>`<div class="o-item" style="padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:15px;font-weight:600">${i+1}. ${it.name}</div>
+      <button class="o-item-del" onclick="orderItems=orderItems.filter(x=>x.pid!=='${it.pid}');renderOrder();updateCartBadge()">✕</button>
+    </div>`).join("");
   } else {
     $("order-list").innerHTML=orderItems.map((it,i)=>{
       const st=it.unit==="kg"?0.1:1;
@@ -495,6 +537,21 @@ function renderOrder(){
       </div>`}).join("");
   }
 
+  if(modoVarios){
+    $("row-sub").style.display="none";
+    $("row-total").style.display="none";
+    $("row-varios").style.display="flex";
+  }else{
+    $("row-sub").style.display="";
+    $("row-total").style.display="";
+    $("row-varios").style.display="none";
+    const sub=orderItems.reduce((s,i)=>s+i.total,0);
+    $("t-sub").textContent=fmt(sub);
+    $("t-total").textContent=fmt(sub);
+  }
+}
+
+
   const sub=orderItems.reduce((s,i)=>s+i.total,0);
   $("t-sub").textContent=fmt(sub);$("t-total").textContent=fmt(sub);
 }
@@ -502,11 +559,21 @@ function renderOrder(){
 // SALE
 function completeSale(){
   if(!orderItems.length)return;
-  const sub=orderItems.reduce((s,i)=>s+i.total,0);
-  const sale={folio:mkFolio(),date:new Date().toISOString(),items:orderItems.map(i=>({name:i.name,price:i.price,unit:i.unit,qty:i.qty,total:i.total})),subtotal:sub,total:sub,source:"terminal"};
+  let sub,total;
+  if(modoVarios){
+    const tEl=document.getElementById("varios-total-input");
+    total=tEl?parseFloat(tEl.value):0;
+    if(!total||total<=0){toast("Ingresa el total");return}
+    sub=total;
+  }else{
+    sub=orderItems.reduce((s,i)=>s+i.total,0);total=sub;
+  }
+  const items=modoVarios?orderItems.map(i=>({name:i.name,price:0,unit:"varios",qty:1,total:0})):orderItems.map(i=>({name:i.name,price:i.price,unit:i.unit,qty:i.qty,total:i.total}));
+  const sale={folio:mkFolio(),date:new Date().toISOString(),items,subtotal:sub,total,source:"terminal",tipo:modoVarios?"varios":"normal"};
   salesRef.add(sale).then(()=>{
     showTicket(sale);
     orderItems=[];renderOrder();updateCartBadge();
+    if(modoVarios)toggleModoVarios();
     toast("✅ Venta registrada");
   }).catch(e=>toast("⚠️ "+e.message));
 }
