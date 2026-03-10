@@ -553,10 +553,6 @@ function renderOrder(){
 }
 
 
-  const sub=orderItems.reduce((s,i)=>s+i.total,0);
-  $("t-sub").textContent=fmt(sub);$("t-total").textContent=fmt(sub);
-}
-
 // SALE
 function completeSale(){
   if(!orderItems.length)return;
