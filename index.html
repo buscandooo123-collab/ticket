@@ -646,7 +646,60 @@ function shareWhatsApp(){
   window.open(url,"_blank");
 }
 
+function buildTicketText(){
+  const s=currentTicketSale;if(!s)return"";
+  const sn=biz.name||"Punto de Venta";
+  let txt="\n";
+  txt+="================================\n";
+  txt+="   "+sn+"\n";
+  if(biz.address)txt+="   "+biz.address+"\n";
+  if(biz.phone)txt+="   Tel: "+biz.phone+"\n";
+  txt+="================================\n";
+  if(s.__orderPrint){
+    txt+="     NOTA DE PEDIDO\n";
+    txt+="================================\n";
+    txt+="Folio: "+s.folio+"\n";
+    txt+="Cliente: "+s.client+"\n";
+    if(s.phone)txt+="Tel: "+s.phone+"\n";
+    const deliv=s.deliveryDate?new Date(s.deliveryDate+"T"+(s.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+    txt+="Entrega: "+deliv+"\n";
+    txt+="--------------------------------\n";
+    (s.items||[]).forEach(i=>{
+      const cantTxt=i.unit==="pza"&&i.pzKg?i.qty+"pz ("+i.kgAprox+"kg)":i.qty+" "+i.unit;
+      txt+=i.name.substring(0,18).padEnd(18)+cantTxt.toString().padStart(12)+"\n";
+      txt+="  Importe: "+fmt(i.total)+"\n";
+    });
+    const totKg=(s.items||[]).reduce((a,i)=>a+(i.kgAprox||i.qty),0);
+    txt+="================================\n";
+    txt+="Kg aprox:".padEnd(20)+totKg.toFixed(2)+" kg\n";
+    txt+="Total:".padEnd(20)+fmt(s.total)+"\n";
+    txt+="Anticipo:".padEnd(20)+fmt(s.advance||0)+"\n";
+    txt+="RESTA:".padEnd(20)+fmt(s.rest||0)+"\n";
+    if(s.notes)txt+="--------------------------------\nNota: "+s.notes+"\n";
+  }else{
+    txt+="Folio: "+s.folio+"\n";
+    txt+=fmtDate(s.date)+"\n";
+    txt+="--------------------------------\n";
+    txt+="Producto          Cant      Imp.\n";
+    txt+="--------------------------------\n";
+    s.items.forEach(i=>{
+      if(s.tipo==="varios"){txt+=i.name.substring(0,28)+"\n"}
+      else{txt+=i.name.substring(0,16).padEnd(16)+(i.qty+" "+i.unit).toString().padStart(6)+" "+fmt(i.total).padStart(9)+"\n"}
+    });
+    txt+="================================\n";
+    txt+="TOTAL:".padEnd(22)+fmt(s.total).padStart(9)+"\n";
+  }
+  txt+="================================\n";
+  txt+="        ¡Gracias!\n\n\n";
+  return txt;
+}
 function printTicket(){
+  if(window.Android&&typeof window.Android.print==="function"){
+    const txt=buildTicketText();
+    window.Android.print(txt);
+    toast("🖨️ Enviando a impresora...");
+    return;
+  }
   document.body.classList.add("printing");
   var cleaned=false;
   function done(){
