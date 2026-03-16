@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-v27';
+const CACHE_NAME = 'pos-v29';
 
 self.addEventListener('install', () => self.skipWaiting());
 

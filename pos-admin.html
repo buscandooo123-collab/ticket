@@ -239,7 +239,7 @@ body.printing .toast{display:none!important}
     <button class="nav-btn" onclick="switchView('history')" id="nav-history">📋 Historial</button>
     <button class="nav-btn" onclick="switchView('admin')" id="nav-admin">⚙️ Config</button>
   </nav>
-  <div class="header-date"><span><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Desconectado</span></span><small id="current-date"></small></div>
+  <div class="header-date"><button id="btn-printer" onclick="connectPrinter()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);cursor:pointer;font-size:11px;font-family:var(--font-mono);color:var(--text-dim);margin-bottom:3px">🖨️ Conectar</button><span><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Desconectado</span></span><small id="current-date"></small></div>
 </header>
 
 <div id="view-pos" class="pos-layout">
@@ -638,7 +638,77 @@ function shareWhatsApp(){
   const url="https://wa.me/?text="+encodeURIComponent(txt);
   window.open(url,"_blank");
 }
-function printTicket(){document.body.classList.add("printing");var cleaned=false;function done(){if(cleaned)return;cleaned=true;document.body.classList.remove("printing");closeTicket()}window.addEventListener("afterprint",function af(){done();window.removeEventListener("afterprint",af)});setTimeout(function(){window.print()},200);setTimeout(done,10000)}
+// ===== BLUETOOTH PRINTER =====
+let btDevice=null,btCharacteristic=null;
+const PRINTER_SERVICES=['e7810a71-73ae-499d-8c15-faa9aef0c3f2','49535343-fe7d-4ae5-8fa9-9fafd205e455','000018f0-0000-1000-8000-00805f9b34fb','0000ff00-0000-1000-8000-00805f9b34fb','0000ffe0-0000-1000-8000-00805f9b34fb'];
+
+async function connectPrinter(){
+  try{
+    const btn=$("btn-printer");
+    if(btDevice&&btDevice.gatt.connected){btDevice.gatt.disconnect();btDevice=null;btCharacteristic=null;btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)";toast("Impresora desconectada");return}
+    btn.textContent="🔍 Buscando...";
+    btDevice=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:PRINTER_SERVICES});
+    btn.textContent="🔗 Conectando...";
+    const server=await btDevice.gatt.connect();
+    const services=await server.getPrimaryServices();
+    for(const svc of services){try{const chars=await svc.getCharacteristics();for(const ch of chars){if(ch.properties.write||ch.properties.writeWithoutResponse){btCharacteristic=ch;break}}if(btCharacteristic)break}catch(e){}}
+    if(!btCharacteristic){toast("No se encontró canal de impresión");btn.textContent="🖨️ Conectar";return}
+    btn.textContent="🖨️ "+btDevice.name;btn.style.background="#22c55e";btn.style.color="#fff";toast("✅ Impresora conectada");
+    btDevice.addEventListener('gattserverdisconnected',()=>{btCharacteristic=null;btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)"})
+  }catch(e){$("btn-printer").textContent="🖨️ Conectar";if(e.name!=="NotFoundError")toast("Error: "+e.message)}
+}
+
+function encodeESC(text){return new TextEncoder().encode(text)}
+async function sendToPrinter(data){
+  if(!btCharacteristic)return false;
+  try{const CHUNK=20;for(let i=0;i<data.length;i+=CHUNK){const chunk=data.slice(i,i+CHUNK);if(btCharacteristic.properties.writeWithoutResponse)await btCharacteristic.writeValueWithoutResponse(chunk);else await btCharacteristic.writeValueWithResponse(chunk);await new Promise(r=>setTimeout(r,30))}return true}catch(e){toast("Error: "+e.message);return false}
+}
+
+function buildTicketESC(sale){
+  const E=0x1B,G=0x1D,L=0x0A;let c=[];
+  function a(b){c.push(...b)}function t(s){c.push(...encodeESC(s))}function ln(){a([L])}
+  function center(){a([E,0x61,1])}function left(){a([E,0x61,0])}
+  function bold(on){a([E,0x45,on?1:0])}function big(){a([G,0x21,0x11])}function normal(){a([G,0x21,0x00])}
+  function line(){t("--------------------------------");ln()}function cut(){a([G,0x56,0x00])}function feed(n){for(let i=0;i<n;i++)ln()}
+  a([E,0x40]);center();bold(true);big();t(biz.name||"Punto de Venta");ln();normal();bold(false);
+  if(biz.address){t(biz.address);ln()}if(biz.phone){t("Tel: "+biz.phone);ln()}
+  t(sale.folio);ln();t(fmtDate(sale.date));ln();line();left();
+  const isV=sale.tipo==="varios";
+  if(isV){sale.items.forEach(i=>{bold(true);t("  "+i.name);ln();bold(false)})}
+  else{bold(true);t("Prod        Cant   P.U.  Imp");ln();bold(false);line();
+    sale.items.forEach(it=>{t(it.name.substring(0,12).padEnd(12)+(it.qty+" "+it.unit).padStart(7)+fmt(it.price).padStart(7)+fmt(it.total).padStart(7));ln()})}
+  line();center();bold(true);big();t("TOTAL: "+fmt(sale.total));ln();normal();bold(false);line();
+  center();bold(true);t("¡Gracias!");ln();bold(false);t("Arts: "+sale.items.length);ln();feed(3);cut();
+  return new Uint8Array(c);
+}
+
+function buildOrderESC(o){
+  const E=0x1B,G=0x1D,L=0x0A;let c=[];
+  function a(b){c.push(...b)}function t(s){c.push(...encodeESC(s))}function ln(){a([L])}
+  function center(){a([E,0x61,1])}function left(){a([E,0x61,0])}
+  function bold(on){a([E,0x45,on?1:0])}function big(){a([G,0x21,0x11])}function normal(){a([G,0x21,0x00])}
+  function line(){t("--------------------------------");ln()}function cut(){a([G,0x56,0x00])}function feed(n){for(let i=0;i<n;i++)ln()}
+  a([E,0x40]);center();bold(true);big();t(biz.name||"Punto de Venta");ln();normal();t(o.folio);ln();bold(true);t("NOTA DE PEDIDO");ln();bold(false);line();
+  left();bold(true);t("Cliente: "+o.client);ln();bold(false);
+  if(o.phone){t("Tel: "+o.phone);ln()}
+  const deliv=o.deliveryDate?new Date(o.deliveryDate+"T"+(o.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+  if(deliv){bold(true);t("Entrega: "+deliv);ln();bold(false)}line();
+  (o.items||[]).forEach(i=>{const kg=i.kgAprox?i.kgAprox+"kg":"";const pz=i.unit==="pza"?i.qty+"pz ":"";t(i.name+" - "+pz+kg+" "+fmt(i.total));ln()});
+  line();const totKg=(o.items||[]).reduce((s,i)=>s+(i.kgAprox||i.qty),0);
+  center();bold(true);t("Kg aprox: "+totKg.toFixed(2));ln();big();t("TOTAL: "+fmt(o.total));ln();normal();
+  t("Anticipo: "+fmt(o.advance||0));ln();big();t("RESTA: "+fmt(o.rest||0));ln();normal();bold(false);
+  if(o.notes){line();t(o.notes);ln()}line();center();bold(true);t("¡Gracias!");ln();bold(false);feed(3);cut();
+  return new Uint8Array(c);
+}
+
+async function printTicket(){
+  const sale=currentTicketSale;if(!sale)return;
+  if(btCharacteristic){
+    try{let data;if(sale.__orderPrint)data=buildOrderESC(sale);else data=buildTicketESC(sale);
+    const ok=await sendToPrinter(data);if(ok){toast("✅ Impreso");return}}catch(e){console.warn("BT:",e)}
+  }
+  document.body.classList.add("printing");setTimeout(function(){window.print();setTimeout(function(){document.body.classList.remove("printing")},500)},200);
+}
 
 // HISTORY
 function renderHistory(){const s=$("history-search").value.toLowerCase(),f=salesHistory.filter(x=>x.folio.toLowerCase().includes(s)||x.items.some(i=>i.name.toLowerCase().includes(s)));$("history-count").textContent=salesHistory.length+" ventas";if(!f.length){$("history-list").innerHTML=`<div style="text-align:center;padding:70px;color:var(--text-faint)"><div style="font-size:50px;opacity:.25">📋</div><div style="font-size:14px;margin-top:10px">${!salesHistory.length?"Sin ventas aún":"Sin resultados"}</div></div>`;return}$("history-list").innerHTML=f.map((s,i)=>`<div class="sale-card"><div style="flex:1;cursor:pointer" onclick="showTicket(salesHistory[${salesHistory.indexOf(s)}])"><div class="sale-folio">${s.folio} ${s.source==='terminal'?'📱':''}</div><div class="sale-date">${fmtDate(s.date)}</div><div class="sale-products">${s.items.map(i=>i.name).join(" · ")}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="sale-total">${fmt(s.total)}</div><button onclick="event.stopPropagation();confirmDeleteSale('${s.id}','${s.folio}')" style="background:none;border:1px solid var(--danger);color:var(--danger);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">🗑 Borrar</button></div></div>`).join("")}

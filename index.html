@@ -195,7 +195,11 @@ body.printing .toast{display:none!important}
     <img class="hdr-logo" id="hdr-logo" src="" style="display:none">
     <div><div class="header-title" id="hdr-title">Terminal</div><div class="header-sub">📱 TERMINAL</div></div>
   </div>
-  <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-label">...</span></div>
+  <div class="sync-status">
+    <button id="btn-printer" onclick="connectPrinter()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);cursor:pointer;font-size:11px;font-family:var(--font-mono);color:var(--text-dim)">🖨️ Conectar</button>
+    <span class="sync-dot" id="sync-dot"></span><span id="sync-label">...</span>
+    <span onclick="forceUpdate()" style="cursor:pointer;margin-left:4px;color:var(--primary);text-decoration:underline">🔄</span>
+  </div>
 </header>
 
 <div class="tab-bar">
@@ -646,18 +650,212 @@ function shareWhatsApp(){
   window.open(url,"_blank");
 }
 
-function printTicket(){
-  document.body.classList.add("printing");
-  var cleaned=false;
-  function done(){
-    if(cleaned)return;cleaned=true;
-    document.body.classList.remove("printing");
-    closeTicket();
-    showTab("catalog");
+// ===== BLUETOOTH PRINTER =====
+let btDevice=null,btCharacteristic=null;
+const PRINTER_SERVICES=[
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  '000018f0-0000-1000-8000-00805f9b34fb',
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb'
+];
+
+async function connectPrinter(){
+  try{
+    const btn=$("btn-printer");
+    if(btDevice&&btDevice.gatt.connected){
+      btDevice.gatt.disconnect();
+      btDevice=null;btCharacteristic=null;
+      btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)";
+      toast("Impresora desconectada");return;
+    }
+    btn.textContent="🔍 Buscando...";
+    btDevice=await navigator.bluetooth.requestDevice({
+      acceptAllDevices:true,
+      optionalServices:PRINTER_SERVICES
+    });
+    btn.textContent="🔗 Conectando...";
+    const server=await btDevice.gatt.connect();
+    const services=await server.getPrimaryServices();
+    for(const svc of services){
+      try{
+        const chars=await svc.getCharacteristics();
+        for(const ch of chars){
+          if(ch.properties.write||ch.properties.writeWithoutResponse){
+            btCharacteristic=ch;break;
+          }
+        }
+        if(btCharacteristic)break;
+      }catch(e){}
+    }
+    if(!btCharacteristic){toast("No se encontró canal de impresión");btn.textContent="🖨️ Conectar";return}
+    btn.textContent="🖨️ "+btDevice.name;btn.style.background="#22c55e";btn.style.color="#fff";
+    toast("✅ Impresora conectada");
+    btDevice.addEventListener('gattserverdisconnected',()=>{
+      btCharacteristic=null;
+      btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)";
+    });
+  }catch(e){
+    $("btn-printer").textContent="🖨️ Conectar";
+    if(e.name!=="NotFoundError")toast("Error: "+e.message);
   }
-  window.addEventListener("afterprint",function af(){done();window.removeEventListener("afterprint",af)});
-  setTimeout(function(){window.print()},200);
-  setTimeout(done,10000);
+}
+
+function encodeESC(text){
+  const encoder=new TextEncoder();
+  return encoder.encode(text);
+}
+
+async function sendToPrinter(data){
+  if(!btCharacteristic)return false;
+  try{
+    const CHUNK=20;
+    for(let i=0;i<data.length;i+=CHUNK){
+      const chunk=data.slice(i,i+CHUNK);
+      if(btCharacteristic.properties.writeWithoutResponse){
+        await btCharacteristic.writeValueWithoutResponse(chunk);
+      }else{
+        await btCharacteristic.writeValueWithResponse(chunk);
+      }
+      await new Promise(r=>setTimeout(r,30));
+    }
+    return true;
+  }catch(e){toast("Error impresión: "+e.message);return false}
+}
+
+function buildTicketESC(sale){
+  const ESC=0x1B,GS=0x1D,LF=0x0A;
+  let cmds=[];
+  function add(bytes){cmds.push(...bytes)}
+  function text(s){cmds.push(...encodeESC(s))}
+  function ln(){add([LF])}
+  function center(){add([ESC,0x61,1])}
+  function left(){add([ESC,0x61,0])}
+  function bold(on){add([ESC,0x45,on?1:0])}
+  function big(){add([GS,0x21,0x11])}
+  function normal(){add([GS,0x21,0x00])}
+  function line(){text("--------------------------------");ln()}
+  function cut(){add([GS,0x56,0x00])}
+  function feed(n){for(let i=0;i<n;i++)ln()}
+
+  // Init
+  add([ESC,0x40]);
+  center();
+
+  // Store name
+  bold(true);big();
+  text(biz.name||"Punto de Venta");ln();
+  normal();bold(false);
+
+  // Info
+  if(biz.address){text(biz.address);ln()}
+  if(biz.phone){text("Tel: "+biz.phone);ln()}
+  text(sale.folio);ln();
+  text(fmtDate(sale.date));ln();
+  line();
+
+  // Products
+  left();
+  const isVarios=sale.tipo==="varios";
+  if(isVarios){
+    sale.items.forEach(i=>{bold(true);text("  "+i.name);ln();bold(false)});
+  }else{
+    bold(true);
+    text("Prod        Cant   P.U.  Imp");ln();
+    bold(false);
+    line();
+    sale.items.forEach(it=>{
+      const n=it.name.substring(0,12).padEnd(12);
+      const q=(it.qty+" "+it.unit).padStart(7);
+      const p=fmt(it.price).padStart(7);
+      const t=fmt(it.total).padStart(7);
+      text(n+q+p+t);ln();
+    });
+  }
+  line();
+
+  // Total
+  center();bold(true);big();
+  text("TOTAL: "+fmt(sale.total));ln();
+  normal();bold(false);
+  line();
+
+  // Footer
+  center();bold(true);
+  text("¡Gracias!");ln();
+  bold(false);
+  text("Arts: "+sale.items.length);ln();
+  feed(3);
+  cut();
+
+  return new Uint8Array(cmds);
+}
+
+function buildOrderESC(o){
+  const ESC=0x1B,GS=0x1D,LF=0x0A;
+  let cmds=[];
+  function add(bytes){cmds.push(...bytes)}
+  function text(s){cmds.push(...encodeESC(s))}
+  function ln(){add([LF])}
+  function center(){add([ESC,0x61,1])}
+  function left(){add([ESC,0x61,0])}
+  function bold(on){add([ESC,0x45,on?1:0])}
+  function big(){add([GS,0x21,0x11])}
+  function normal(){add([GS,0x21,0x00])}
+  function line(){text("--------------------------------");ln()}
+  function cut(){add([GS,0x56,0x00])}
+  function feed(n){for(let i=0;i<n;i++)ln()}
+
+  add([ESC,0x40]);
+  center();bold(true);big();
+  text(biz.name||"Punto de Venta");ln();
+  normal();text(o.folio);ln();
+  bold(false);
+  bold(true);text("NOTA DE PEDIDO");ln();bold(false);
+  line();
+  left();
+  bold(true);text("Cliente: "+o.client);ln();bold(false);
+  if(o.phone){text("Tel: "+o.phone);ln()}
+  const deliv=o.deliveryDate?new Date(o.deliveryDate+"T"+(o.deliveryTime||"12:00")).toLocaleString("es-MX",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+  if(deliv){bold(true);text("Entrega: "+deliv);ln();bold(false)}
+  line();
+  (o.items||[]).forEach(i=>{
+    const kg=i.kgAprox?i.kgAprox+"kg":"";
+    const pz=i.unit==="pza"?i.qty+"pz ":"";
+    text(i.name+" - "+pz+kg+" "+fmt(i.total));ln();
+  });
+  line();
+  const totKg=(o.items||[]).reduce((s,i)=>s+(i.kgAprox||i.qty),0);
+  center();bold(true);
+  text("Kg aprox: "+totKg.toFixed(2));ln();
+  big();text("TOTAL: "+fmt(o.total));ln();normal();
+  text("Anticipo: "+fmt(o.advance||0));ln();
+  big();text("RESTA: "+fmt(o.rest||0));ln();normal();
+  bold(false);
+  if(o.notes){line();text(o.notes);ln()}
+  line();center();bold(true);text("¡Gracias!");ln();bold(false);
+  feed(3);cut();
+  return new Uint8Array(cmds);
+}
+
+async function printTicket(){
+  const sale=currentTicketSale;if(!sale)return;
+  // Try Bluetooth direct first
+  if(btCharacteristic){
+    try{
+      let data;
+      if(sale.__orderPrint){data=buildOrderESC(sale)}
+      else{data=buildTicketESC(sale)}
+      const ok=await sendToPrinter(data);
+      if(ok){toast("✅ Impreso");return}
+    }catch(e){console.warn("BT error:",e)}
+  }
+  // Fallback to window.print
+  document.body.classList.add("printing");
+  setTimeout(function(){
+    window.print();
+    setTimeout(function(){document.body.classList.remove("printing")},500);
+  },200);
 }
 
 // PEDIDOS
@@ -799,6 +997,17 @@ function showPedidoTicket(o){
     <div class="ticket-footer"><div class="thanks">¡Gracias!</div></div>
   </div></div>`;
   $("ticket-modal").classList.remove("hidden");
+}
+
+function forceUpdate(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+      caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>{
+        location.reload(true);
+      });
+    });
+  }else{location.reload(true)}
 }
 
 // INIT
