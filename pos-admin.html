@@ -239,7 +239,7 @@ body.printing .toast{display:none!important}
     <button class="nav-btn" onclick="switchView('history')" id="nav-history">📋 Historial</button>
     <button class="nav-btn" onclick="switchView('admin')" id="nav-admin">⚙️ Config</button>
   </nav>
-  <div class="header-date"><button id="btn-printer" onclick="connectPrinter()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);cursor:pointer;font-size:11px;font-family:var(--font-mono);color:var(--text-dim);margin-bottom:3px">🖨️ Conectar</button><span><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Desconectado</span></span><small id="current-date"></small></div>
+  <div class="header-date"><button id="btn-printer" onclick="configurePrinter()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);cursor:pointer;font-size:11px;font-family:var(--font-mono);color:var(--text-dim);margin-bottom:3px">🖨️ Impresora</button><span><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Desconectado</span></span><small id="current-date"></small></div>
 </header>
 
 <div id="view-pos" class="pos-layout">
@@ -470,6 +470,15 @@ function getCatLabel(id){const c=getCat(id);return c?c.icon+" "+c.name:"—"}
 function toast(m){const e=document.createElement("div");e.className="toast";e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 
 // =============================================
+// INIT IMPRESORA
+(function(){
+  const mac=localStorage.getItem('printer_mac');
+  if(mac){
+    const btn=document.getElementById('btn-printer');
+    if(btn){btn.textContent="🖨️ "+mac;btn.style.background="#22c55e";btn.style.color="#fff";}
+  }
+})();
+
 // 🔥 FIREBASE REAL-TIME LISTENERS
 // =============================================
 function startListeners(){
@@ -639,30 +648,22 @@ function shareWhatsApp(){
   window.open(url,"_blank");
 }
 // ===== BLUETOOTH PRINTER =====
-let btDevice=null,btCharacteristic=null;
-const PRINTER_SERVICES=['e7810a71-73ae-499d-8c15-faa9aef0c3f2','49535343-fe7d-4ae5-8fa9-9fafd205e455','000018f0-0000-1000-8000-00805f9b34fb','0000ff00-0000-1000-8000-00805f9b34fb','0000ffe0-0000-1000-8000-00805f9b34fb'];
-
-async function connectPrinter(){
-  try{
-    const btn=$("btn-printer");
-    if(btDevice&&btDevice.gatt.connected){btDevice.gatt.disconnect();btDevice=null;btCharacteristic=null;btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)";toast("Impresora desconectada");return}
-    btn.textContent="🔍 Buscando...";
-    btDevice=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:PRINTER_SERVICES});
-    btn.textContent="🔗 Conectando...";
-    const server=await btDevice.gatt.connect();
-    const services=await server.getPrimaryServices();
-    for(const svc of services){try{const chars=await svc.getCharacteristics();for(const ch of chars){if(ch.properties.write||ch.properties.writeWithoutResponse){btCharacteristic=ch;break}}if(btCharacteristic)break}catch(e){}}
-    if(!btCharacteristic){toast("No se encontró canal de impresión");btn.textContent="🖨️ Conectar";return}
-    btn.textContent="🖨️ "+btDevice.name;btn.style.background="#22c55e";btn.style.color="#fff";toast("✅ Impresora conectada");
-    btDevice.addEventListener('gattserverdisconnected',()=>{btCharacteristic=null;btn.textContent="🖨️ Conectar";btn.style.background="var(--bg-input)";btn.style.color="var(--text-dim)"})
-  }catch(e){$("btn-printer").textContent="🖨️ Conectar";if(e.name!=="NotFoundError")toast("Error: "+e.message)}
+// ===== IMPRESORA VIA FIRESTORE =====
+function configurePrinter(){
+  const current=localStorage.getItem('printer_mac')||'';
+  const mac=prompt('Ingresa la dirección MAC de tu impresora\n(Ejemplo: 00:11:22:33:44:55)',current);
+  if(mac===null)return;
+  const clean=mac.trim().toUpperCase();
+  if(!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(clean)){
+    toast('⚠️ Formato inválido. Usa: 00:11:22:33:44:55');return;
+  }
+  localStorage.setItem('printer_mac',clean);
+  const btn=$("btn-printer");
+  btn.textContent="🖨️ "+clean;btn.style.background="#22c55e";btn.style.color="#fff";
+  toast("✅ Impresora guardada: "+clean);
 }
 
 function encodeESC(text){return new TextEncoder().encode(text)}
-async function sendToPrinter(data){
-  if(!btCharacteristic)return false;
-  try{const CHUNK=20;for(let i=0;i<data.length;i+=CHUNK){const chunk=data.slice(i,i+CHUNK);if(btCharacteristic.properties.writeWithoutResponse)await btCharacteristic.writeValueWithoutResponse(chunk);else await btCharacteristic.writeValueWithResponse(chunk);await new Promise(r=>setTimeout(r,30))}return true}catch(e){toast("Error: "+e.message);return false}
-}
 
 function buildTicketESC(sale){
   const E=0x1B,G=0x1D,L=0x0A;let c=[];
@@ -703,11 +704,19 @@ function buildOrderESC(o){
 
 async function printTicket(){
   const sale=currentTicketSale;if(!sale)return;
-  if(btCharacteristic){
-    try{let data;if(sale.__orderPrint)data=buildOrderESC(sale);else data=buildTicketESC(sale);
-    const ok=await sendToPrinter(data);if(ok){toast("✅ Impreso");return}}catch(e){console.warn("BT:",e)}
-  }
-  document.body.classList.add("printing");setTimeout(function(){window.print();setTimeout(function(){document.body.classList.remove("printing")},500)},200);
+  const mac=localStorage.getItem('printer_mac');
+  if(!mac){toast("⚠️ Configura la impresora primero (botón 🖨️)");return;}
+  try{
+    let data;if(sale.__orderPrint)data=buildOrderESC(sale);else data=buildTicketESC(sale);
+    await db.collection("print_jobs").add({
+      status:"pending",
+      printer_address:mac,
+      esc_bytes:Array.from(data),
+      created_at:firebase.firestore.FieldValue.serverTimestamp(),
+      folio:sale.folio||""
+    });
+    toast("✅ Enviado a imprimir");
+  }catch(e){toast("❌ Error: "+e.message);}
 }
 
 // HISTORY
